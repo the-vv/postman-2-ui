@@ -40,6 +40,16 @@ npm run build      # static output in dist/postman-2-ui/browser
 
 ## Hosting
 
+### GitHub Pages
+
+The workflow in `.github/workflows/deploy-pages.yml` builds the app and deploys it on every push to `main`. You can also run it by hand from the **Actions** tab.
+
+One-time setup: **Settings → Pages → Build and deployment → Source: GitHub Actions**.
+
+The site will be at `https://<user>.github.io/postman-2-ui/`.
+
+### Any static host
+
 `npm run build` creates static files in `dist/postman-2-ui/browser`. Upload that folder to any static host, such as GitHub Pages, Netlify, S3 or nginx. It uses `<base href="./">`, so it works from a sub-folder too.
 
 ## Project layout
