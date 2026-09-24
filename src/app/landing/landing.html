@@ -1,0 +1,82 @@
+<div class="landing">
+  <div class="hero">
+    <h1>Turn a Postman collection into an API console</h1>
+    <p class="lead">
+      Upload a collection, add docs and examples, pick a theme, and export one standalone HTML file.
+      Open it in any browser or embed it with an iframe.
+    </p>
+  </div>
+
+  <div
+    class="dropzone"
+    [class.drag]="dragging()"
+    (drop)="onDrop($event)"
+    (dragover)="onDragOver($event)"
+    (dragleave)="dragging.set(false)"
+    (click)="browse()"
+    role="button"
+    tabindex="0"
+    (keydown.enter)="browse()"
+  >
+    <div class="dz-icon">
+      <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.8">
+        <path d="M12 16V4m0 0-4 4m4-4 4 4M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+      </svg>
+    </div>
+    <div class="dz-title">Drop your files here, or click to browse</div>
+    <div class="muted">Postman collection v2.0 / v2.1 (.json) and optional environment files</div>
+  </div>
+
+  <div class="landing-actions">
+    <button class="btn ghost" (click)="loadSample()">Try with a sample collection</button>
+  </div>
+
+  @if (results().length) {
+    <div class="results">
+      @for (r of results(); track $index) {
+        <div class="result" [class.bad]="!r.ok">
+          <div class="result-head">
+            <span class="badge" [class.badge-coll]="r.kind === 'collection'" [class.badge-env]="r.kind === 'environment'">
+              {{ r.kind === 'unknown' ? 'invalid' : r.kind }}
+            </span>
+            <span class="result-name">{{ r.fileName }}</span>
+            <span class="grow"></span>
+            @if (r.ok) {
+              <span class="ok-text">✓ Valid</span>
+            } @else {
+              <span class="err-text">✕ Invalid</span>
+            }
+            <button class="icon-btn" (click)="remove(r)" title="Remove">✕</button>
+          </div>
+          @if (r.summary) {
+            <div class="muted small">{{ r.summary }}</div>
+          }
+          @for (e of r.errors; track $index) {
+            <div class="msg err">{{ e }}</div>
+          }
+          @for (w of r.warnings; track $index) {
+            <div class="msg warn">{{ w }}</div>
+          }
+        </div>
+      }
+    </div>
+
+    <div class="start-row">
+      @if (collection()) {
+        <span class="muted small">
+          {{ environments().length }} environment file(s) will be included. You can add more later.
+        </span>
+        <button class="btn primary lg" (click)="start()">Open editor →</button>
+      } @else {
+        <span class="err-text small">Add a valid Postman collection to continue.</span>
+      }
+    </div>
+  }
+
+  <div class="features">
+    <div><b>Validate &amp; preview</b><span>See a live, playable console while you edit.</span></div>
+    <div><b>Docs &amp; examples</b><span>Write Markdown docs. Save real responses as examples.</span></div>
+    <div><b>Environments</b><span>Collection and environment variables, editable in the final UI.</span></div>
+    <div><b>One HTML file</b><span>No backend. Host it anywhere or embed it with an iframe.</span></div>
+  </div>
+</div>

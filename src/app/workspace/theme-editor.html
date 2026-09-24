@@ -1,0 +1,133 @@
+@let t = theme();
+@let o = options();
+<div class="editor-head">
+  <div class="eyebrow">Look &amp; export</div>
+  <h2>Theme &amp; export</h2>
+  <p class="hint">Changes show in the preview right away.</p>
+</div>
+
+<section class="panel">
+  <div class="panel-head">
+    <h3>Color</h3>
+    <button class="link" (click)="resetTheme()">Reset theme</button>
+  </div>
+  <div class="swatches">
+    @for (s of presets; track s.color) {
+      <button
+        class="swatch"
+        [class.on]="t.primary === s.color"
+        [style.background]="s.color"
+        [title]="s.name"
+        (click)="setTheme({ primary: s.color })"
+      ></button>
+    }
+  </div>
+  <div class="color-row">
+    <input type="color" [value]="t.primary" (input)="setColor($any($event.target).value)" />
+    <input class="mono hex" [value]="t.primary" (change)="setColor($any($event.target).value)" maxlength="7" />
+    <span class="muted small">Custom color (hex)</span>
+  </div>
+</section>
+
+<section class="panel">
+  <h3>Appearance</h3>
+  <div class="grid-2">
+    <label class="block">
+      <span>Mode</span>
+      <select [value]="t.mode" (change)="setTheme({ mode: $any($event.target).value })">
+        <option value="light">Light</option>
+        <option value="dark">Dark</option>
+        <option value="system">Follow system</option>
+      </select>
+    </label>
+    <label class="block">
+      <span>Layout of API page</span>
+      <select [value]="t.layout" (change)="setTheme({ layout: $any($event.target).value })">
+        <option value="side-by-side">Docs left, console right</option>
+        <option value="stacked">Docs on top, console below</option>
+      </select>
+    </label>
+    <label class="block">
+      <span>Font</span>
+      <select [value]="t.font" (change)="setTheme({ font: $any($event.target).value })">
+        <option value="system">System</option>
+        <option value="sans">Sans (Inter / Helvetica)</option>
+        <option value="serif">Serif</option>
+        <option value="mono">Monospace</option>
+      </select>
+    </label>
+    <label class="block">
+      <span>Corners</span>
+      <select [value]="t.radius" (change)="setTheme({ radius: $any($event.target).value })">
+        <option value="none">Square</option>
+        <option value="small">Small</option>
+        <option value="medium">Medium</option>
+        <option value="large">Large</option>
+      </select>
+    </label>
+    <label class="block">
+      <span>Density</span>
+      <select [value]="t.density" (change)="setTheme({ density: $any($event.target).value })">
+        <option value="comfortable">Comfortable</option>
+        <option value="compact">Compact</option>
+      </select>
+    </label>
+  </div>
+  <label class="check">
+    <input type="checkbox" [checked]="t.allowToggle" (change)="setTheme({ allowToggle: $any($event.target).checked })" />
+    Let users switch light / dark mode
+  </label>
+</section>
+
+<section class="panel">
+  <h3>Console features</h3>
+  <label class="check">
+    <input type="checkbox" [checked]="o.showTryIt" (change)="setOption({ showTryIt: $any($event.target).checked })" />
+    “Try it” console (send real requests)
+  </label>
+  <label class="check">
+    <input type="checkbox" [checked]="o.allowVarEdit" (change)="setOption({ allowVarEdit: $any($event.target).checked })" />
+    Users can edit variables (saved in their browser)
+  </label>
+  <label class="check">
+    <input type="checkbox" [checked]="o.showExamples" (change)="setOption({ showExamples: $any($event.target).checked })" />
+    Show examples
+  </label>
+  <label class="check">
+    <input type="checkbox" [checked]="o.showCurl" (change)="setOption({ showCurl: $any($event.target).checked })" />
+    “Copy as cURL” button
+  </label>
+  <label class="block inline">
+    <span>Request timeout (seconds)</span>
+    <input
+      type="number"
+      min="1"
+      max="600"
+      [value]="o.timeoutSec"
+      (change)="setOption({ timeoutSec: +$any($event.target).value || 30 })"
+    />
+  </label>
+</section>
+
+<section class="panel">
+  <h3>Custom CSS <span class="opt">advanced</span></h3>
+  <p class="hint">Added to the end of the exported page. Example: <code>.brand-title {{ '{' }} font-size: 18px {{ '}' }}</code></p>
+  <textarea rows="5" class="mono" [value]="t.customCss" (input)="setTheme({ customCss: $any($event.target).value })"></textarea>
+</section>
+
+<section class="panel export-panel">
+  <h3>Export</h3>
+  <p class="hint">
+    Downloads <code>{{ fileName() }}</code>: one HTML file with everything inside. No server needed.
+  </p>
+  <button class="btn primary lg" (click)="export()">Download HTML</button>
+
+  <h4>Embed in another app</h4>
+  <pre class="snippet">{{ embedCode() }}</pre>
+  <button class="btn sm" (click)="copyEmbed()">{{ copied() ? 'Copied ✓' : 'Copy embed code' }}</button>
+  <ul class="tips">
+    <li>Open an API directly: <code>{{ fileName() }}#/&lt;api-id&gt;</code> (the id is shown in the URL when you click an API).</li>
+    <li>Hide the sidebar: <code>{{ fileName() }}?sidebar=0</code>. Force a theme: <code>?theme=dark</code>.</li>
+    <li>APIs must allow browser calls from the page's origin (CORS), just like any web app.</li>
+  </ul>
+</section>

@@ -1,0 +1,103 @@
+@let sel = store.selection();
+<div class="ws" [class.preview-full]="previewMode() === 'full'" [class.preview-hidden]="previewMode() === 'hidden'">
+  <nav class="ws-nav">
+    <div class="nav-group">
+      <button class="nav-item" [class.on]="sel.type === 'overview'" (click)="store.selection.set({ type: 'overview' })">
+        <span class="nav-ic">◧</span> Overview
+      </button>
+      <button
+        class="nav-item"
+        [class.on]="sel.type === 'environments'"
+        (click)="store.selection.set({ type: 'environments' })"
+      >
+        <span class="nav-ic">⚙</span> Environments
+        <span class="count">{{ store.project()!.environments.length }}</span>
+      </button>
+      <button class="nav-item" [class.on]="sel.type === 'theme'" (click)="store.selection.set({ type: 'theme' })">
+        <span class="nav-ic">◆</span> Theme &amp; export
+      </button>
+    </div>
+    <div class="nav-title">APIs</div>
+    <input class="nav-search" type="search" placeholder="Filter APIs" [value]="filter()" (input)="filter.set($any($event.target).value)" />
+    <div class="nav-tree">
+      <ng-container *ngTemplateOutlet="tree; context: { $implicit: store.project()!.items, depth: 0 }" />
+    </div>
+  </nav>
+
+  <ng-template #tree let-items let-depth="depth">
+    @for (n of items; track n.id) {
+      @if (visible(n)) {
+        @if (n.kind === 'folder') {
+          <div
+            class="tree-row folder"
+            [class.on]="isSelected(n.id)"
+            [style.padding-left.px]="8 + depth * 14"
+            (click)="select(n.id)"
+          >
+            <button class="caret" [class.open]="isOpen(n.id)" (click)="toggle(n.id, $event)">▸</button>
+            <span class="tree-name">{{ n.name }}</span>
+          </div>
+          @if (isOpen(n.id)) {
+            <ng-container *ngTemplateOutlet="tree; context: { $implicit: n.children, depth: depth + 1 }" />
+          }
+        } @else {
+          <div
+            class="tree-row"
+            [class.on]="isSelected(n.id)"
+            [class.hidden-req]="n.hidden"
+            [style.padding-left.px]="8 + depth * 14"
+            (click)="select(n.id)"
+            [title]="n.hidden ? 'Hidden from export' : n.name"
+          >
+            <span class="method m-{{ n.method.toLowerCase() }}">{{ n.method }}</span>
+            <span class="tree-name">{{ n.name }}</span>
+            @if (n.examples.length) {
+              <span class="ex-dot" title="{{ n.examples.length }} example(s)">{{ n.examples.length }}</span>
+            }
+          </div>
+        }
+      }
+    }
+  </ng-template>
+
+  <section class="ws-editor">
+    @switch (sel.type) {
+      @case ('overview') {
+        <app-overview-editor />
+      }
+      @case ('environments') {
+        <app-env-editor />
+      }
+      @case ('theme') {
+        <app-theme-editor />
+      }
+      @default {
+        @let node = selectedNode();
+        @if (node?.kind === 'request') {
+          <app-request-editor [req]="$any(node)" />
+        } @else if (node?.kind === 'folder') {
+          <app-folder-editor [folder]="$any(node)" />
+        } @else {
+          <div class="empty-box">Select an item on the left.</div>
+        }
+      }
+    }
+  </section>
+
+  <section class="ws-preview">
+    <div class="preview-bar">
+      <span class="live-dot"></span>
+      <span class="small">Live preview</span>
+      <span class="grow"></span>
+      <div class="seg">
+        <button [class.on]="previewMode() === 'split'" (click)="previewMode.set('split')">Split</button>
+        <button [class.on]="previewMode() === 'full'" (click)="previewMode.set('full')">Full</button>
+      </div>
+      <button class="icon-btn" title="Hide preview" (click)="previewMode.set('hidden')">✕</button>
+    </div>
+    <app-preview />
+  </section>
+  @if (previewMode() === 'hidden') {
+    <button class="show-preview btn sm" (click)="previewMode.set('split')">Show preview</button>
+  }
+</div>

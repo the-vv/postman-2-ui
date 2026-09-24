@@ -1,0 +1,107 @@
+@let r = req();
+<div class="editor-head">
+  <div class="eyebrow">API</div>
+  <h2>{{ r.name }}</h2>
+  <div class="endpoint-line">
+    <span class="method m-{{ r.method.toLowerCase() }}">{{ r.method }}</span>
+    <code>{{ fullUrl() }}</code>
+  </div>
+  <label class="check">
+    <input type="checkbox" [checked]="r.hidden" (change)="patch({ hidden: $any($event.target).checked })" />
+    Hide this API from the exported file
+  </label>
+</div>
+
+<section class="panel">
+  <h3>Description</h3>
+  <p class="hint">From the Postman collection. Markdown is supported. Shown at the top of the API page.</p>
+  <textarea
+    rows="5"
+    [value]="r.description"
+    (input)="patch({ description: $any($event.target).value })"
+    placeholder="What does this API do?"
+  ></textarea>
+</section>
+
+<section class="panel">
+  <h3>Extra documentation <span class="opt">optional</span></h3>
+  <p class="hint">
+    Markdown: <code># heading</code>, <code>**bold**</code>, <code>`code`</code>, lists, tables, <code>```json</code>
+    code blocks and links. See it live in the preview.
+  </p>
+  <textarea
+    rows="9"
+    class="mono"
+    [value]="r.docs"
+    (input)="patch({ docs: $any($event.target).value })"
+    placeholder="## Notes&#10;- Rate limit: 100 requests / minute&#10;- Returns 404 when the item does not exist"
+  ></textarea>
+</section>
+
+<section class="panel">
+  <div class="panel-head">
+    <h3>Examples <span class="count">{{ r.examples.length }}</span></h3>
+    <button class="btn sm" (click)="addExample()">+ Add manually</button>
+  </div>
+  <p class="hint">
+    Run the request in the preview, then click <b>Save as example</b> to capture the real response. Or add one by
+    hand.
+  </p>
+
+  @for (ex of r.examples; track ex.id; let i = $index; let first = $first; let last = $last) {
+    <div class="example">
+      <div class="example-head">
+        <input class="ex-name" [value]="ex.name" (input)="updateExample(ex.id, { name: $any($event.target).value })" />
+        <span class="tag">{{ sourceLabel(ex.source) }}</span>
+        <span class="grow"></span>
+        <button class="icon-btn" [disabled]="first" (click)="moveExample(i, -1)" title="Move up">↑</button>
+        <button class="icon-btn" [disabled]="last" (click)="moveExample(i, 1)" title="Move down">↓</button>
+        <button class="icon-btn danger" (click)="removeExample(ex.id)" title="Delete example">✕</button>
+      </div>
+      <div class="ex-grid">
+        <label>
+          <span>Status code</span>
+          <input type="number" [value]="ex.code" (input)="updateExample(ex.id, { code: +$any($event.target).value })" />
+        </label>
+        <label>
+          <span>Status text</span>
+          <input [value]="ex.status" (input)="updateExample(ex.id, { status: $any($event.target).value })" />
+        </label>
+        <label>
+          <span>Language</span>
+          <select [value]="ex.language" (change)="updateExample(ex.id, { language: $any($event.target).value })">
+            <option value="json">JSON</option>
+            <option value="xml">XML</option>
+            <option value="html">HTML</option>
+            <option value="text">Text</option>
+          </select>
+        </label>
+      </div>
+      <label class="block">
+        <span>Headers <em>(one per line, <code>Key: value</code>)</em></span>
+        <textarea
+          rows="2"
+          class="mono"
+          [value]="headersText(ex.headers)"
+          (change)="updateExample(ex.id, { headers: parseHeaders($any($event.target).value) })"
+        ></textarea>
+      </label>
+      <label class="block">
+        <span class="row-between">
+          Body
+          @if (ex.language === 'json') {
+            <button class="link" type="button" (click)="formatJson(ex)">Format JSON</button>
+          }
+        </span>
+        <textarea
+          rows="8"
+          class="mono"
+          [value]="ex.body"
+          (input)="updateExample(ex.id, { body: $any($event.target).value })"
+        ></textarea>
+      </label>
+    </div>
+  } @empty {
+    <div class="empty-box">No examples yet.</div>
+  }
+</section>
