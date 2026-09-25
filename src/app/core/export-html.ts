@@ -1,34 +1,29 @@
-import { Project, TreeNode } from './models';
+import { Project } from './models';
 // The console runtime is plain JS/CSS, inlined as text into the exported file.
 // @ts-ignore - text loader import
 import runtimeJs from '../../runtime/console.js' with { loader: 'text' };
 // @ts-ignore - text loader import
 import runtimeCss from '../../runtime/console.css' with { loader: 'text' };
 
-function stripHidden(items: TreeNode[], keepHidden: boolean): TreeNode[] {
-  const out: TreeNode[] = [];
-  for (const n of items) {
-    if (n.kind === 'request') {
-      if (keepHidden || !n.hidden) out.push(n);
-    } else {
-      const children = stripHidden(n.children, keepHidden);
-      if (children.length || keepHidden) out.push({ ...n, children });
-    }
-  }
-  return out;
-}
+/** Marks exported files so the generator can read them back. */
+export const EXPORT_FORMAT = 'p2u-console@1';
 
-/** The JSON payload the console runtime reads. */
+/**
+ * The JSON payload the console runtime reads. It holds the whole project (hidden APIs
+ * included, the runtime skips them) so an exported file can be re-opened without loss.
+ */
 export function consoleData(p: Project, editorMode: boolean) {
   return {
+    format: EXPORT_FORMAT,
     title: p.title,
     description: p.description,
-    items: stripHidden(p.items, editorMode),
+    items: p.items,
     collectionVars: p.collectionVars,
     environments: p.environments,
     activeEnvId: p.activeEnvId,
     theme: p.theme,
     options: p.options,
+    sourceFile: p.fileName,
     editorMode,
     generatedAt: new Date().toISOString(),
   };

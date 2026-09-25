@@ -1,5 +1,6 @@
 import { Injectable, computed, signal } from '@angular/core';
 import { Environment, Example, Folder, Project, TreeNode } from './models';
+import { ImportResult } from './postman-parser';
 import { DEFAULT_OPTIONS, DEFAULT_THEME } from './models';
 
 export type Selection =
@@ -44,6 +45,10 @@ export class ProjectStore {
   readonly selection = signal<Selection>({ type: 'overview' });
   readonly index = computed(() => indexTree(this.project()?.items ?? []));
   readonly storageError = signal('');
+  /** A newly uploaded collection waiting to be merged (opens the review dialog). */
+  readonly syncSource = signal<ImportResult | null>(null);
+  /** Short message shown at the top of the editor. */
+  readonly notice = signal('');
 
   private saveTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -55,6 +60,8 @@ export class ProjectStore {
 
   close() {
     this.project.set(null);
+    this.syncSource.set(null);
+    this.notice.set('');
     try {
       localStorage.removeItem(STORAGE_KEY);
     } catch {

@@ -6,12 +6,13 @@ import { Preview } from './preview';
 import { RequestEditor } from './request-editor';
 import { EnvEditor, FolderEditor, OverviewEditor } from './simple-editors';
 import { ThemeEditor } from './theme-editor';
+import { SyncDialog } from './sync-dialog';
 
 export type PreviewMode = 'split' | 'full' | 'hidden';
 
 @Component({
   selector: 'app-workspace',
-  imports: [NgTemplateOutlet, Preview, RequestEditor, FolderEditor, OverviewEditor, EnvEditor, ThemeEditor],
+  imports: [NgTemplateOutlet, Preview, RequestEditor, FolderEditor, OverviewEditor, EnvEditor, ThemeEditor, SyncDialog],
   templateUrl: './workspace.html',
 })
 export class Workspace {

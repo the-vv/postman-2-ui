@@ -17,6 +17,7 @@ export class Landing {
   readonly collection = computed(() =>
     [...this.results()].reverse().find((r) => r.kind === 'collection' && r.ok),
   );
+  readonly html = computed(() => [...this.results()].reverse().find((r) => r.kind === 'console' && r.ok));
   readonly environments = computed(() => this.results().filter((r) => r.kind === 'environment' && r.ok));
 
   async browse() {
@@ -52,8 +53,16 @@ export class Landing {
 
   start() {
     const c = this.collection();
-    if (!c?.project) return;
+    const h = this.html();
     const envs = this.environments().map((e) => e.environment!);
+    if (h?.project) {
+      // Re-open an exported file. A collection uploaded with it is merged in after review.
+      const p = h.project;
+      this.store.load({ ...p, environments: [...p.environments, ...envs], activeEnvId: p.activeEnvId ?? envs[0]?.id ?? null });
+      if (c) this.store.syncSource.set(c);
+      return;
+    }
+    if (!c?.project) return;
     this.store.load({ ...c.project, environments: envs, activeEnvId: envs[0]?.id ?? null });
   }
 }

@@ -25,6 +25,9 @@
     </div>
     <div class="dz-title">Drop your files here, or click to browse</div>
     <div class="muted">Postman collection v2.0 / v2.1 (.json) and optional environment files</div>
+    <div class="muted small dz-tip">
+      Updating an old export? Drop the exported <b>.html</b> together with the new collection. Your docs are kept.
+    </div>
   </div>
 
   <div class="landing-actions">
@@ -36,8 +39,8 @@
       @for (r of results(); track $index) {
         <div class="result" [class.bad]="!r.ok">
           <div class="result-head">
-            <span class="badge" [class.badge-coll]="r.kind === 'collection'" [class.badge-env]="r.kind === 'environment'">
-              {{ r.kind === 'unknown' ? 'invalid' : r.kind }}
+            <span class="badge" [class.badge-coll]="r.kind === 'collection'" [class.badge-env]="r.kind === 'environment'" [class.badge-html]="r.kind === 'console'">
+              {{ r.kind === 'unknown' ? 'invalid' : r.kind === 'console' ? 'exported html' : r.kind }}
             </span>
             <span class="result-name">{{ r.fileName }}</span>
             <span class="grow"></span>
@@ -62,13 +65,19 @@
     </div>
 
     <div class="start-row">
-      @if (collection()) {
+      @if (html() && collection()) {
+        <span class="muted small">The exported file opens with its docs. Then you review what the collection adds or changes.</span>
+        <button class="btn primary lg" (click)="start()">Open &amp; review updates →</button>
+      } @else if (html()) {
+        <span class="muted small">Opens the exported file with all its docs, examples and settings.</span>
+        <button class="btn primary lg" (click)="start()">Open editor →</button>
+      } @else if (collection()) {
         <span class="muted small">
           {{ environments().length }} environment file(s) will be included. You can add more later.
         </span>
         <button class="btn primary lg" (click)="start()">Open editor →</button>
       } @else {
-        <span class="err-text small">Add a valid Postman collection to continue.</span>
+        <span class="err-text small">Add a valid Postman collection or exported HTML file to continue.</span>
       }
     </div>
   }

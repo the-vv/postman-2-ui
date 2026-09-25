@@ -137,6 +137,32 @@ input[type='checkbox'] { accent-color: var(--p); }
 .features > div { background: var(--bg); border: 1px solid var(--line); border-radius: var(--r); padding: 14px; display: grid; gap: 4px; }
 .features span { color: var(--fg-3); font-size: 13px; }
 
+/* sync dialog + notice */
+.badge-html { background: #f5f3ff; color: #7c3aed; }
+.dz-tip { margin-top: 10px; }
+.notice { display: flex; align-items: center; gap: 10px; background: var(--p-soft); color: var(--p-strong); border: 1px solid #c7d2fe; border-radius: var(--r); padding: 8px 12px; margin-bottom: 14px; font-size: 13px; }
+.notice span { flex: 1; }
+.modal-bg { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.45); display: flex; align-items: flex-start; justify-content: center; padding: 6vh 16px; z-index: 50; overflow: auto; }
+.modal { background: var(--bg); border-radius: 12px; width: 100%; max-width: 760px; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25); }
+.modal-head { display: flex; justify-content: space-between; align-items: flex-start; padding: 16px 20px; border-bottom: 1px solid var(--line); }
+.modal-head h2 { margin: 0; font-size: 18px; }
+.modal-body { padding: 14px 20px; max-height: 64vh; overflow: auto; }
+.modal-foot { display: flex; align-items: center; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--line); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+.chip { font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 999px; background: var(--bg-3); color: var(--fg-2); }
+.chip-new { background: #ecfdf5; color: var(--ok); }
+.chip-changed { background: #fffbeb; color: var(--warn); }
+.chip-removed { background: #fef2f2; color: var(--err); }
+.sync-sec { border: 1px solid var(--line); border-radius: var(--r); padding: 10px 12px; margin-top: 12px; }
+.sync-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+.sync-head h3 { margin: 0; font-size: 14px; }
+.sync-row { display: flex; align-items: center; gap: 8px; padding: 5px 2px; cursor: pointer; border-top: 1px solid var(--bg-3); }
+.sync-row:first-of-type { border-top: 0; }
+.sync-row .method { width: 50px; flex: none; }
+.sync-name { font-weight: 550; }
+.sync-path { margin-left: auto; text-align: right; }
+.sync-row .tag { margin-left: auto; }
+
 /* workspace */
 .ws {
   display: grid;

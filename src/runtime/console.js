@@ -672,7 +672,20 @@
 
   /* --------------------------------------------------------------- index */
 
+  /** Hidden APIs stay in the data (for re-import) but are not shown outside the editor. */
+  function visibleItems(items) {
+    var out = [];
+    (items || []).forEach(function (n) {
+      if (n.kind === 'folder') {
+        var children = visibleItems(n.children);
+        if (children.length || IS_EDITOR) out.push(Object.assign({}, n, { children: children }));
+      } else if (IS_EDITOR || !n.hidden) out.push(n);
+    });
+    return out;
+  }
+
   function buildIndex() {
+    DATA.items = visibleItems(DATA.items);
     S.index = new Map();
     S.parent = new Map();
     (function walk(items, parent) {
