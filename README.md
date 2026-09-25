@@ -19,6 +19,14 @@ Runs fully in the browser. There is no backend, and nothing is uploaded.
 <iframe src="my-api.html" style="width:100%;height:800px;border:0"></iframe>
 ```
 
+### Updating an export when the collection changes
+
+You don't need to redo your docs:
+
+- Drop the exported `.html` on the start page to open it again with all docs, examples, environments and theme.
+- Drop it together with the updated collection, or use **⟳ Update from collection** in the editor.
+- A review dialog lists **new**, **changed** and **removed** APIs. Pick what to apply. Your docs and examples are always kept, and renamed or moved APIs keep their links.
+
 In the exported file:
 
 - `my-api.html#/<api-id>` opens one API directly.

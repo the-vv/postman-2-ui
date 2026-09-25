@@ -15,7 +15,7 @@ import {
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Json = any;
 
-export type FileKind = 'collection' | 'environment' | 'unknown';
+export type FileKind = 'collection' | 'environment' | 'console' | 'unknown';
 
 export interface ImportResult {
   fileName: string;
@@ -376,7 +376,62 @@ export function parseEnvironment(json: Json, fileName: string): ImportResult {
   return res;
 }
 
+function countTree(items: TreeNode[], c = { requests: 0, folders: 0, examples: 0 }) {
+  for (const n of items) {
+    if (n.kind === 'folder') {
+      c.folders++;
+      countTree(n.children, c);
+    } else {
+      c.requests++;
+      c.examples += n.examples?.length ?? 0;
+    }
+  }
+  return c;
+}
+
+/** Reads back an HTML file exported by this app, with all docs, examples and settings. */
+export function parseExportedHtml(text: string, fileName: string): ImportResult {
+  const res: ImportResult = { fileName, kind: 'console', ok: false, errors: [], warnings: [], summary: '' };
+  const m = text.match(/<script type="application\/json" id="p2u-data">([\s\S]*?)<\/script>/);
+  if (!m) {
+    res.errors.push('This HTML file was not exported by Postman → UI.');
+    return res;
+  }
+  let d: Json;
+  try {
+    d = JSON.parse(m[1]);
+  } catch (e) {
+    res.errors.push(`The embedded data is damaged: ${(e as Error).message}`);
+    return res;
+  }
+  if (!Array.isArray(d?.items)) {
+    res.errors.push('The embedded data has no APIs.');
+    return res;
+  }
+  if (!d.format) {
+    res.warnings.push('Exported by an older version: APIs that were hidden are not in this file.');
+  }
+  const c = countTree(d.items);
+  res.ok = true;
+  res.summary = `"${str(d.title)}": ${c.requests} requests, ${c.folders} folders, ${c.examples} examples`;
+  res.project = {
+    version: 1,
+    title: str(d.title) || 'API console',
+    description: str(d.description),
+    items: d.items,
+    collectionVars: Array.isArray(d.collectionVars) ? d.collectionVars : [],
+    environments: Array.isArray(d.environments) ? d.environments : [],
+    activeEnvId: d.activeEnvId ?? null,
+    theme: { ...DEFAULT_THEME, ...d.theme },
+    options: { ...DEFAULT_OPTIONS, ...d.options },
+    fileName: str(d.sourceFile) || fileName,
+    warnings: [],
+  };
+  return res;
+}
+
 export function parseFile(text: string, fileName: string): ImportResult {
+  if (/\.html?$/i.test(fileName) || /^\s*</.test(text)) return parseExportedHtml(text, fileName);
   let json: Json;
   try {
     json = JSON.parse(text);
@@ -397,7 +452,7 @@ export function parseFile(text: string, fileName: string): ImportResult {
     fileName,
     kind,
     ok: false,
-    errors: ['This is not a Postman collection (v2.x) or environment file.'],
+    errors: ['This is not a Postman collection (v2.x), environment, or exported HTML file.'],
     warnings: [],
     summary: '',
   };

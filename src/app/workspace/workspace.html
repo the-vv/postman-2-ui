@@ -61,6 +61,12 @@
   </ng-template>
 
   <section class="ws-editor">
+    @if (store.notice()) {
+      <div class="notice">
+        <span>{{ store.notice() }}</span>
+        <button class="icon-btn" (click)="store.notice.set('')" aria-label="Dismiss">✕</button>
+      </div>
+    }
     @switch (sel.type) {
       @case ('overview') {
         <app-overview-editor />
@@ -101,3 +107,6 @@
     <button class="show-preview btn sm" (click)="previewMode.set('split')">Show preview</button>
   }
 </div>
+@if (store.syncSource()) {
+  <app-sync-dialog />
+}
