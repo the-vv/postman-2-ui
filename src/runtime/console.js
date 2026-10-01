@@ -11,6 +11,7 @@
   var app = document.getElementById('app');
   var qs = new URLSearchParams(location.search);
   var METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
+  var VARS_PAGE = '~variables';
   var FORBIDDEN_HEADER =
     /^(host|content-length|connection|cookie2?|origin|referer|accept-encoding|accept-charset|keep-alive|transfer-encoding|te|trailer|upgrade|via|expect|date|dnt|access-control-request-(headers|method))$|^(sec-|proxy-)/i;
 
@@ -79,6 +80,7 @@
     menu: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 12h18M3 18h18"/></svg>',
     vars: '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg>',
     x: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg>',
+    home: '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>',
     search: '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>',
   };
 
@@ -356,6 +358,63 @@
     $randomEmail: function () { return 'user' + Math.floor(Math.random() * 100000) + '@example.com'; },
   };
 
+  /* ------------------------------------------------------------ base URL */
+
+  function pageOrigin() {
+    try {
+      var u = new URL(document.baseURI);
+      return /^https?:$/.test(u.protocol) ? u.origin : '';
+    } catch (e) {
+      return '';
+    }
+  }
+
+  function isBaseVar(name) {
+    return /^base[_-]?url$/i.test(name) || name === S.baseVar;
+  }
+
+  /** The variable that holds the base URL: a baseUrl-like name, else the most common {{var}} at the start of URLs. */
+  function detectBaseVar() {
+    var keys = [];
+    (DATA.environments || []).forEach(function (e) { e.values.forEach(function (v) { keys.push(v.key); }); });
+    (DATA.collectionVars || []).forEach(function (v) { keys.push(v.key); });
+    var named = keys.filter(function (k) { return /^base[_-]?url$/i.test(k); })[0];
+    if (named) return named;
+    var count = {};
+    S.index.forEach(function (n) {
+      var m = n.kind === 'request' && /^\{\{\s*([^{}]+?)\s*\}\}/.exec(n.url);
+      if (m) count[m[1]] = (count[m[1]] || 0) + 1;
+    });
+    var best = Object.keys(count).sort(function (a, b) { return count[b] - count[a]; })[0];
+    return best || 'baseUrl';
+  }
+
+  /** The row that stores the base URL: active environment first, then collection variables. */
+  function baseRow(create) {
+    var name = S.baseVar;
+    var env = S.envs[S.envId];
+    var row = (env || []).filter(function (v) { return v.key === name; })[0] || S.coll.filter(function (v) { return v.key === name; })[0];
+    if (!row && create) {
+      row = { key: name, value: '', enabled: true };
+      (env || S.coll).push(row);
+    }
+    return row || null;
+  }
+
+  /** Makes a final request URL valid: removes a doubled protocol and adds a missing one. */
+  function normalizeUrl(url) {
+    url = String(url).trim();
+    // e.g. "https://https://api.example.com" when the base URL already has its protocol.
+    url = url.replace(/^(?:[a-z][a-z0-9+.-]*:\/\/)+(?=[a-z][a-z0-9+.-]*:\/\/)/i, '');
+    // A base URL ending with "/" joined to a path starting with "/".
+    url = url.replace(/^([a-z][a-z0-9+.-]*:\/\/[^/?#]+)\/{2,}/i, '$1/');
+    if (!url || /^[a-z][a-z0-9+.-]*:\/\//i.test(url)) return url;
+    var origin = pageOrigin();
+    if (url.charAt(0) === '/' && origin) return origin + url;
+    var host = url.split(/[/?#]/)[0];
+    return (/^(localhost|127\.|\d+\.\d+\.\d+\.\d+|\[)/i.test(host) ? 'http://' : 'https://') + url;
+  }
+
   /** Replaces {{var}} placeholders. Unknown names are collected in `missing`. */
   function resolve(s, missing, map) {
     s = String(s == null ? '' : s);
@@ -363,9 +422,15 @@
     for (var depth = 0; depth < 5 && s.indexOf('{{') >= 0; depth++) {
       var changed = false;
       s = s.replace(/\{\{\s*([^{}]+?)\s*\}\}/g, function (all, name) {
-        if (Object.prototype.hasOwnProperty.call(map, name)) {
+        var base = isBaseVar(name);
+        if (Object.prototype.hasOwnProperty.call(map, name) && !(base && !String(map[name]).trim())) {
           changed = true;
           return map[name];
+        }
+        // An empty or missing base URL falls back to this page's address.
+        if (base && pageOrigin()) {
+          changed = true;
+          return pageOrigin();
         }
         if (DYNAMIC[name]) {
           changed = true;
@@ -495,7 +560,7 @@
       else headers.push([ak, av]);
     }
     var url = base + (query.length ? (base.indexOf('?') >= 0 ? '&' : '?') + query.join('&') : '');
-    if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(url) && url) url = 'http://' + url;
+    url = normalizeUrl(url);
 
     var hasCT = function () {
       return headers.some(function (h) { return h[0].toLowerCase() === 'content-type'; });
@@ -505,6 +570,8 @@
     var mode = d.method === 'GET' || d.method === 'HEAD' ? 'none' : d.body.mode;
     if (mode === 'raw') {
       body = resolve(d.body.raw, missing, map);
+      // Like Postman, comments in a JSON body are removed before sending.
+      if (d.body.language === 'json') body = stripJsonComments(body);
       if (!hasCT()) {
         var ct = { json: 'application/json', xml: 'application/xml', html: 'text/html', javascript: 'application/javascript' }[d.body.language] || 'text/plain';
         headers.push(['Content-Type', ct]);
@@ -551,6 +618,40 @@
       return true;
     });
     return { method: d.method, url: url, headers: headers, sendHeaders: sendHeaders, body: body, curlBody: curlBody, missing: Object.keys(missing), skipped: skipped };
+  }
+
+  // Removes line and block comments that are outside of strings.
+  function stripJsonComments(src) {
+    var out = '';
+    var i = 0;
+    var inStr = false;
+    while (i < src.length) {
+      var c = src[i];
+      var n = src[i + 1];
+      if (inStr) {
+        out += c;
+        if (c === '\\') {
+          out += n || '';
+          i += 2;
+          continue;
+        }
+        if (c === '"') inStr = false;
+        i++;
+      } else if (c === '"') {
+        inStr = true;
+        out += c;
+        i++;
+      } else if (c === '/' && n === '/') {
+        while (i < src.length && src[i] !== '\n') i++;
+      } else if (c === '/' && n === '*') {
+        var end = src.indexOf('*/', i + 2);
+        i = end < 0 ? src.length : end + 2;
+      } else {
+        out += c;
+        i++;
+      }
+    }
+    return out;
   }
 
   function shq(s) {
@@ -807,7 +908,6 @@
       }
     });
     persist();
-    if (S.modal) renderModal();
   }
 
   function collect(run, res) {
@@ -936,6 +1036,7 @@
     Object.keys(S.drafts).forEach(function (id) {
       if (!S.index.has(id)) delete S.drafts[id];
     });
+    S.baseVar = detectBaseVar();
   }
 
   function ancestors(id) {
@@ -963,7 +1064,7 @@
       '<aside class="sb" id="sb"></aside>' +
       '<div class="sb-backdrop" data-act="close-sb"></div>' +
       '<main class="main" id="main"></main>' +
-      '</div><div id="modal"></div>';
+      '</div>';
     renderSidebar();
   }
 
@@ -1021,7 +1122,15 @@
         })
         .join('');
     })(DATA.items || [], 0);
-    tree.innerHTML = html || '<div class="muted small pad">No APIs match your search.</div>';
+    var navLink = function (id, label, icon) {
+      return '<a class="tr nav-link' + ((S.current || '') === id ? ' active' : '') + '" href="#/' + id + '" data-nav="' + id + '">' + icon + '<span class="tr-name">' + label + '</span></a>';
+    };
+    var g = DATA.guide;
+    tree.innerHTML = (q ? '' : '<div class="nav-links">' +
+      navLink('', g && g.enabled !== false ? 'Get started' : 'Overview', ICON.home) +
+      (DATA.options.showTryIt !== false ? navLink(VARS_PAGE, 'Variables', ICON.vars) : '') +
+      '</div><div class="nav-sep">APIs</div>') +
+      (html || '<div class="muted small pad">No APIs match your search.</div>');
   }
 
   /* ----------------------------------------------------------------- main */
@@ -1034,7 +1143,8 @@
     var main = document.getElementById('main');
     var node = S.current ? S.index.get(S.current) : null;
     var html;
-    if (!node) html = overviewPage();
+    if (S.current === VARS_PAGE) html = variablesPage();
+    else if (!node) html = homePage();
     else if (node.kind === 'folder') html = folderPage(node);
     else html = requestPage(node);
     main.innerHTML = topbar() + html;
@@ -1057,19 +1167,83 @@
     }).join('') + '</div>';
   }
 
-  function overviewPage() {
+  function envOptions() {
+    return '<option value="">No environment</option>' + (DATA.environments || []).map(function (e) {
+      return '<option value="' + esc(e.id) + '"' + (e.id === S.envId ? ' selected' : '') + '>' + esc(e.name) + '</option>';
+    }).join('');
+  }
+
+  /** Environment picker + base URL field, used on the home and variables pages. */
+  function configCard(withLink) {
+    var editable = DATA.options.allowVarEdit !== false;
+    var row = baseRow(false);
+    var value = row && row.enabled !== false ? row.value : '';
+    var origin = pageOrigin();
     var envs = DATA.environments || [];
+    return '<div class="card cfg">' +
+      (envs.length ? '<div class="cfg-row"><label class="lbl" for="env-select-page">Environment</label><select id="env-select-page" class="env-page-select">' + envOptions() + '</select></div>' : '') +
+      '<div class="cfg-row"><label class="lbl" for="base-url">Base URL <code>{{' + esc(S.baseVar) + '}}</code></label>' +
+      '<div><input id="base-url" spellcheck="false" value="' + esc(value) + '" placeholder="' + esc(origin || 'https://api.example.com') + '"' + (editable ? '' : ' disabled') + '>' +
+      '<div class="muted small" id="base-hint">' + baseHint(value) + '</div></div></div>' +
+      (withLink ? '<div class="cfg-foot"><a href="#/' + VARS_PAGE + '" data-nav="' + VARS_PAGE + '">All variables →</a></div>' : '') +
+      '</div>';
+  }
+
+  function baseHint(value) {
+    var v = String(value || '').trim();
+    if (!v) {
+      var origin = pageOrigin();
+      return origin ? 'Not set, so requests go to this page\'s address: <code>' + esc(origin) + '</code>' : 'Not set. Enter the API address, e.g. <code>https://api.example.com</code>';
+    }
+    if (!/^https?:\/\//i.test(v) && v.indexOf('{{') !== 0) return '<span class="warn-text">Start it with http:// or https://</span>';
+    return 'Used as <code>{{' + esc(S.baseVar) + '}}</code> in every request.';
+  }
+
+  function homePage() {
+    var envs = DATA.environments || [];
+    var g = DATA.guide;
+    var showGuide = !!(g && g.enabled !== false);
     return '<div class="page narrow">' +
-      '<div class="eyebrow">API Reference</div><h1 class="title">' + esc(DATA.title) + '</h1>' +
+      '<div class="eyebrow">' + (showGuide ? 'Get started' : 'API Reference') + '</div>' +
+      '<h1 class="title">' + esc(showGuide && g.title ? g.title : DATA.title) + '</h1>' +
       '<div class="meta muted small">' + countRequests(DATA.items || []) + ' endpoints' + (envs.length ? ' · ' + envs.length + ' environment' + (envs.length > 1 ? 's' : '') : '') + '</div>' +
       (DATA.description ? '<div class="md">' + md(DATA.description) + '</div>' : '') +
+      (showGuide && g.content ? '<div class="md guide">' + md(g.content) + '</div>' : '') +
+      (DATA.options.showTryIt !== false ? '<h2 class="section">Configuration</h2>' + configCard(true) : '') +
       '<h2 class="section">Endpoints</h2>' + endpointList(DATA.items || []) +
+      '</div>';
+  }
+
+  function variablesPage() {
+    var editable = DATA.options.allowVarEdit !== false;
+    var env = (DATA.environments || []).filter(function (e) { return e.id === S.envId; })[0];
+    var table = function (list, scope) {
+      if (!list.length && !editable) return '<p class="muted small">No variables.</p>';
+      return '<div class="card var-card"><table class="kv-edit"><thead><tr><th></th><th>Variable</th><th>Value</th><th></th></tr></thead><tbody>' + list.map(function (v, i) {
+        var a = ' data-vs="' + scope + '" data-i="' + i + '"' + (editable ? '' : ' disabled');
+        return '<tr' + (v.key === S.baseVar ? ' class="is-base"' : '') + '><td class="c-chk"><input type="checkbox"' + a + ' data-k="enabled"' + (v.enabled !== false ? ' checked' : '') + '></td>' +
+          '<td><input' + a + ' data-k="key" value="' + esc(v.key) + '" placeholder="name"></td>' +
+          '<td><input' + a + ' data-k="value" value="' + esc(v.value) + '" placeholder="value"' + (v.type === 'secret' ? ' type="password"' : '') + '></td>' +
+          '<td class="c-del">' + (editable ? '<button class="icon-btn" data-act="var-del"' + a + ' title="Remove">' + ICON.x + '</button>' : '') + '</td></tr>';
+      }).join('') + (list.length ? '' : '<tr><td colspan="4" class="muted small pad">No variables yet.</td></tr>') + '</tbody></table>' +
+        (editable ? '<button class="btn ghost sm" data-act="var-add" data-vs="' + scope + '">+ Add variable</button>' : '') + '</div>';
+    };
+    return '<div class="page narrow">' +
+      '<div class="crumbs"><a href="#/" data-nav="">Home</a></div>' +
+      '<h1 class="title">Variables</h1>' +
+      '<p class="muted">Use variables as <code>{{name}}</code> in URLs, headers and bodies. Environment values override collection values. ' +
+      (IS_EDITOR ? 'Changes here are for testing only. Edit defaults in the builder.' : 'Your changes are saved in this browser.') + '</p>' +
+      configCard(false) +
+      (env ? '<h2 class="section">Environment: ' + esc(env.name) + '</h2>' + table(S.envs[env.id], 'env') : '') +
+      '<h2 class="section">Collection variables</h2>' + table(S.coll, 'coll') +
+      (S.globals.length ? '<h2 class="section">Globals <span class="muted small">(set by scripts)</span></h2>' + table(S.globals, 'glob') : '') +
+      (editable ? '<div class="var-foot"><button class="btn ghost" data-act="vars-reset">Reset all to defaults</button></div>' : '') +
       '</div>';
   }
 
   function crumbs(id) {
     var a = ancestors(id);
-    return '<div class="crumbs"><a href="#/" data-nav="">Overview</a>' + a.map(function (f) {
+    return '<div class="crumbs"><a href="#/" data-nav="">Home</a>' + a.map(function (f) {
       return '<span>/</span><a href="#/' + esc(f.id) + '" data-nav="' + esc(f.id) + '">' + esc(f.name) + '</a>';
     }).join('') + '</div>';
   }
@@ -1363,41 +1537,7 @@
     return rows.join('') || '<div class="muted small pad">No output.</div>';
   }
 
-  /* ----------------------------------------------------- variables modal */
-
-  function renderModal() {
-    var m = document.getElementById('modal');
-    if (!S.modal) {
-      m.innerHTML = '';
-      return;
-    }
-    var editable = DATA.options.allowVarEdit !== false;
-    var envs = DATA.environments || [];
-    var env = envs.filter(function (e) { return e.id === S.envId; })[0];
-    var table = function (list, scope) {
-      if (!list.length && !editable) return '<p class="muted small">No variables.</p>';
-      return '<table class="kv-edit"><thead><tr><th></th><th>Variable</th><th>Value</th><th></th></tr></thead><tbody>' + list.map(function (v, i) {
-        var a = ' data-vs="' + scope + '" data-i="' + i + '"' + (editable ? '' : ' disabled');
-        return '<tr><td class="c-chk"><input type="checkbox"' + a + ' data-k="enabled"' + (v.enabled !== false ? ' checked' : '') + '></td>' +
-          '<td><input' + a + ' data-k="key" value="' + esc(v.key) + '"></td>' +
-          '<td><input' + a + ' data-k="value" value="' + esc(v.value) + '"' + (v.type === 'secret' ? ' type="password"' : '') + '></td>' +
-          '<td class="c-del">' + (editable ? '<button class="icon-btn" data-act="var-del"' + a + '>' + ICON.x + '</button>' : '') + '</td></tr>';
-      }).join('') + '</tbody></table>' + (editable ? '<button class="btn ghost sm" data-act="var-add" data-vs="' + scope + '">+ Add variable</button>' : '');
-    };
-    m.innerHTML = '<div class="modal-bg" data-act="close-modal"><div class="modal" role="dialog" aria-modal="true" aria-label="Variables">' +
-      '<div class="modal-head"><h2>Variables</h2><button class="icon-btn" data-act="close-modal" aria-label="Close">' + ICON.x + '</button></div>' +
-      '<div class="modal-body">' +
-      (envs.length ? '<div class="form-row"><label class="lbl">Active environment</label><select id="env-select-modal">' +
-        '<option value="">No environment</option>' + envs.map(function (e) {
-          return '<option value="' + esc(e.id) + '"' + (e.id === S.envId ? ' selected' : '') + '>' + esc(e.name) + '</option>';
-        }).join('') + '</select></div>' : '') +
-      (env ? '<h3 class="sub">' + esc(env.name) + '</h3>' + table(S.envs[env.id], 'env') : '') +
-      '<h3 class="sub">Collection variables</h3>' + table(S.coll, 'coll') +
-      (S.globals.length ? '<h3 class="sub">Globals <span class="muted small">(set by scripts)</span></h3>' + table(S.globals, 'glob') : '') +
-      '<p class="muted small">Use variables as <code>{{name}}</code> in URLs, headers and bodies. Environment values override collection values.' + (IS_EDITOR ? ' Changes here are for testing only. Edit defaults in the generator.' : ' Your changes are saved in this browser.') + '</p>' +
-      '</div><div class="modal-foot">' + (editable ? '<button class="btn ghost" data-act="vars-reset">Reset to defaults</button>' : '') + '<span class="grow"></span><button class="btn primary" data-act="close-modal">Done</button></div>' +
-      '</div></div>';
-  }
+  /* ------------------------------------------------------------ variables */
 
   function varsList(scope) {
     return scope === 'env' ? S.envs[S.envId] : scope === 'glob' ? S.globals : S.coll;
@@ -1407,17 +1547,18 @@
     S.envId = id && S.envs[id] ? id : null;
     persist();
     renderSidebar();
-    if (S.modal) renderModal();
+    if (!S.current || S.current === VARS_PAGE) renderMain();
     if (S.current && $('#console')) renderWarn(S.current);
   }
 
   /* ----------------------------------------------------------- navigation */
 
   function navigate(id, silent) {
-    id = id && S.index.has(id) ? id : null;
+    var special = id === VARS_PAGE;
+    id = special || (id && S.index.has(id)) ? id : null;
     S.current = id;
     document.body.classList.remove('sb-open');
-    if (id) ancestors(id).forEach(function (f) { S.collapsed.delete(f.id); });
+    if (id && !special) ancestors(id).forEach(function (f) { S.collapsed.delete(f.id); });
     if (!IS_EDITOR) {
       var h = id ? '#/' + encodeURIComponent(id) : '#/';
       if (location.hash !== h && !(h === '#/' && !location.hash)) {
@@ -1445,6 +1586,15 @@
       return;
     }
     var id = S.current;
+    if (t.id === 'base-url') {
+      var row = baseRow(true);
+      row.value = t.value.trim();
+      row.enabled = true;
+      persist();
+      var hint = document.getElementById('base-hint');
+      if (hint) hint.innerHTML = baseHint(row.value);
+      return;
+    }
     if (t.dataset.vs) {
       var list = varsList(t.dataset.vs);
       var row = list && list[+t.dataset.i];
@@ -1556,7 +1706,6 @@
     var a = e.target.closest('[data-act]');
     if (!a) return;
     var act = a.dataset.act;
-    if (act === 'close-modal' && a.classList.contains('modal-bg') && e.target !== a) return;
     if (act === 'pretty') {
       S.respPretty[S.current] = a.checked;
       renderResponse(S.current);
@@ -1584,31 +1733,25 @@
         document.body.classList.remove('sb-open');
         break;
       case 'vars':
-        S.modal = 'vars';
-        renderModal();
-        break;
-      case 'close-modal':
-        S.modal = null;
-        renderModal();
+        navigate(VARS_PAGE);
         break;
       case 'var-add':
         if (a.dataset.vs === 'env' && !S.envs[S.envId]) break;
         varsList(a.dataset.vs).push({ key: '', value: '', enabled: true });
         persist();
-        renderModal();
+        renderMain();
         break;
       case 'var-del':
         varsList(a.dataset.vs).splice(+a.dataset.i, 1);
         persist();
-        renderModal();
-        if (id && $('#console')) renderWarn(id);
+        renderMain();
         break;
       case 'vars-reset':
         initVars(null);
         persist();
         renderSidebar();
-        renderModal();
-        if (id && $('#console')) renderWarn(id);
+        renderMain();
+        toast('Variables reset to defaults');
         break;
       case 'con-tab':
         d.tab = a.dataset.tab;
@@ -1693,8 +1836,12 @@
 
   function onChange(e) {
     var t = e.target;
-    if (t.id === 'env-select' || t.id === 'env-select-modal') {
+    if (t.id === 'env-select' || t.id === 'env-select-page') {
       setEnv(t.value);
+      return;
+    }
+    if (t.id === 'base-url') {
+      if (S.current === VARS_PAGE) renderMain();
       return;
     }
     if (t.type === 'checkbox' || t.tagName === 'SELECT' || t.type === 'file' || t.type === 'radio') onInput(e);
@@ -1727,10 +1874,9 @@
       var main = document.getElementById('main');
       var scroll = main ? main.scrollTop : 0;
       renderSidebar();
-      S.current = prevCurrent && S.index.has(prevCurrent) ? prevCurrent : null;
+      S.current = prevCurrent && (prevCurrent === VARS_PAGE || S.index.has(prevCurrent)) ? prevCurrent : null;
       renderTree();
       renderMain();
-      if (S.modal) renderModal();
       main = document.getElementById('main');
       if (main) main.scrollTop = scroll;
     } else if (msg.type === 'select') {
@@ -1759,10 +1905,6 @@
     app.addEventListener('change', onChange);
     app.addEventListener('click', onClick);
     document.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape' && S.modal) {
-        S.modal = null;
-        renderModal();
-      }
       if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && S.current && $('#console')) {
         e.preventDefault();
         send(S.current);

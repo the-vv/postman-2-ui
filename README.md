@@ -10,7 +10,8 @@ Runs fully in the browser. There is no backend, and nothing is uploaded.
 - **Live preview**: a working API console, updated as you edit.
 - **Docs**: edit each API's description and add extra Markdown docs. Folder and collection intros can be edited too.
 - **Examples**: examples from the collection are kept. Run a request in the preview and click **Save as example**, or add examples by hand.
-- **Variables**: collection variables and environments. Users can switch environments and edit values in the exported page (saved in their browser).
+- **Get started page**: the first page of the export shows a guide (Markdown, editable on the builder's Overview), a **Configuration** box (environment + base URL) and the API list.
+- **Variables**: collection variables and environments. The export has a dedicated **Variables** page to switch environments, set the base URL and add or edit any value (saved in the browser). An empty base URL uses the page's own address.
 - **Auth**: Bearer, Basic and API key, including auth inherited from folders or the collection.
 - **Postman scripts**: pre-request and test scripts (collection, folder and request level) run as they are in a sandbox when you click **Send**. Supported: `pm.environment` / `collectionVariables` / `globals` / `variables`, `pm.request` changes, `pm.response`, `pm.test` + `pm.expect`, `pm.sendRequest`, `pm.execution.skipRequest`, `console.log` and the old `postman.*` / `tests[...]` syntax. Scripts are editable in the builder and visible (and editable) in the exported console. Not available: `require()`, `setNextRequest`, cookies, visualizer.
 - **Theme**: color (blue by default), light / dark / system mode, layout, font, corners, density, custom CSS, and feature toggles.
@@ -33,6 +34,7 @@ In the exported file:
 - `my-api.html#/<api-id>` opens one API directly.
 - `?sidebar=0` hides the sidebar.
 - `?theme=dark` or `?theme=light` forces a theme.
+- `#/~variables` opens the Variables page.
 
 > APIs must allow browser requests from the page's origin (CORS).
 

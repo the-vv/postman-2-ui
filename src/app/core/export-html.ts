@@ -1,4 +1,4 @@
-import { Project } from './models';
+import { DEFAULT_GUIDE, Project } from './models';
 // The console runtime is plain JS/CSS, inlined as text into the exported file.
 // @ts-ignore - text loader import
 import runtimeJs from '../../runtime/console.js' with { loader: 'text' };
@@ -21,6 +21,7 @@ export function consoleData(p: Project, editorMode: boolean) {
     description: p.description,
     items: p.items,
     scripts: p.scripts ?? null,
+    guide: p.guide ?? DEFAULT_GUIDE,
     collectionVars: p.collectionVars,
     environments: p.environments,
     activeEnvId: p.activeEnvId,

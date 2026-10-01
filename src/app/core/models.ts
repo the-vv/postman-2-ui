@@ -100,6 +100,27 @@ export interface ThemeConfig {
   customCss: string;
 }
 
+/** The "Get started" home page of the exported console. */
+export interface GuideConfig {
+  enabled: boolean;
+  title: string;
+  /** Markdown. */
+  content: string;
+}
+
+export const DEFAULT_GUIDE: GuideConfig = {
+  enabled: true,
+  title: '',
+  content: [
+    '## How to use this console',
+    '',
+    '1. Pick an environment and check the **Base URL** below. It must start with `http://` or `https://`.',
+    '2. Choose an API on the left. Its documentation is shown next to a **Try it** panel.',
+    '3. Change params, headers or the body, then click **Send** (or press `Ctrl + Enter`).',
+    '4. Set tokens and other values on the **Variables** page. Your changes are saved in this browser.',
+  ].join('\n'),
+};
+
 export interface ConsoleOptions {
   showTryIt: boolean;
   allowVarEdit: boolean;
@@ -116,6 +137,8 @@ export interface Project {
   items: TreeNode[];
   /** Collection-level scripts, run before / after every request. */
   scripts?: Scripts;
+  /** Get started page. Missing means the default guide. */
+  guide?: GuideConfig;
   collectionVars: KV[];
   environments: Environment[];
   activeEnvId: string | null;

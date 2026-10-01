@@ -1,6 +1,6 @@
-import { Component, inject, input, signal } from '@angular/core';
+import { Component, computed, inject, input, signal } from '@angular/core';
 import { ProjectStore } from '../core/project.store';
-import { Folder, KV } from '../core/models';
+import { DEFAULT_GUIDE, Folder, GuideConfig, KV } from '../core/models';
 import { parseFile } from '../core/postman-parser';
 import { pickFiles } from '../core/file-utils';
 import { uid } from '../core/postman-parser';
@@ -62,6 +62,29 @@ export class FolderEditor {
           ></textarea>
         </label>
       </section>
+      @let g = guide();
+      <section class="panel">
+        <div class="panel-head">
+          <h3>Get started page</h3>
+          <button class="link" (click)="resetGuide()">Reset text</button>
+        </div>
+        <p class="hint">
+          The first page of the exported console. It shows this guide, then a <b>Configuration</b> box (environment and
+          base URL) and the list of APIs. A separate <b>Variables</b> page lets users see and change every value.
+        </p>
+        <label class="check">
+          <input type="checkbox" [checked]="g.enabled" (change)="setGuide({ enabled: $any($event.target).checked })" />
+          Show the guide on the first page
+        </label>
+        <label class="block">
+          <span>Page title <em>(empty uses the collection title)</em></span>
+          <input [value]="g.title" (input)="setGuide({ title: $any($event.target).value })" [placeholder]="p.title" />
+        </label>
+        <label class="block">
+          <span>Guide <em>(Markdown)</em></span>
+          <textarea rows="10" class="mono" [value]="g.content" (input)="setGuide({ content: $any($event.target).value })"></textarea>
+        </label>
+      </section>
       <app-scripts-editor
         [scripts]="p.scripts"
         hint="Collection scripts run for every API, before folder and API scripts."
@@ -84,6 +107,15 @@ export class FolderEditor {
 })
 export class OverviewEditor {
   readonly store = inject(ProjectStore);
+  readonly guide = computed(() => this.store.project()?.guide ?? DEFAULT_GUIDE);
+
+  setGuide(patch: Partial<GuideConfig>) {
+    this.store.update({ guide: { ...this.guide(), ...patch } });
+  }
+
+  resetGuide() {
+    this.store.update({ guide: { ...DEFAULT_GUIDE, enabled: this.guide().enabled, title: this.guide().title } });
+  }
 }
 
 @Component({
