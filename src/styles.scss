@@ -144,6 +144,23 @@ input[type='checkbox'] { accent-color: var(--p); }
 .api-help ul { padding-left: 18px; margin: 6px 0 0; }
 .api-help li { margin: 3px 0; }
 
+/* export dialog */
+.export-modal { max-width: 680px; }
+.seg.seg-lg { display: flex; width: 100%; margin: 6px 0 10px; }
+.seg.seg-lg button { flex: 1; padding: 8px 12px; font-size: 13.5px; font-weight: 600; }
+.api-row { display: grid; grid-template-columns: 110px 1fr; gap: 8px; margin-bottom: 6px; }
+.export-modal h4 { margin: 14px 0 6px; font-size: 13px; display: flex; align-items: center; gap: 8px; }
+.radio-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+.radio-cards label { border: 1px solid var(--line); border-radius: var(--r); padding: 10px 12px; cursor: pointer; display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; align-items: center; }
+.radio-cards label span { grid-column: 2; font-size: 12px; color: var(--fg-3); }
+.radio-cards label.on { border-color: var(--p); background: var(--p-soft); }
+.publish-result { margin-top: 12px; border-radius: var(--r); padding: 10px 12px; font-size: 13px; }
+.publish-result.ok { background: #ecfdf5; color: var(--ok); }
+.publish-result.bad { background: #fef2f2; color: var(--err); }
+.publish-result pre { margin: 8px 0 0; max-height: 180px; overflow: auto; white-space: pre-wrap; word-break: break-all; font: 12px/1.5 var(--mono); color: var(--fg); background: var(--bg); padding: 8px; border-radius: 6px; }
+.btn:disabled { opacity: 0.6; cursor: default; }
+@media (max-width: 700px) { .radio-cards, .api-row { grid-template-columns: 1fr; } }
+
 /* sync dialog + notice */
 .badge-html { background: #f5f3ff; color: #7c3aed; }
 .dz-tip { margin-top: 10px; }

@@ -122,9 +122,10 @@
 <section class="panel export-panel">
   <h3>Export</h3>
   <p class="hint">
-    Downloads <code>{{ fileName() }}</code>: one HTML file with everything inside. No server needed.
+    One HTML file (<code>{{ fileName() }}</code>) with everything inside. Download it, or send it straight to your
+    own API. You can change the file name there.
   </p>
-  <button class="btn primary lg" (click)="export()">Download HTML</button>
+  <button class="btn primary lg" (click)="export()">Export…</button>
 
   <h4>Embed in another app</h4>
   <pre class="snippet">{{ embedCode() }}</pre>

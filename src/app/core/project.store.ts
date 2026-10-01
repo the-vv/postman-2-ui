@@ -47,6 +47,8 @@ export class ProjectStore {
   readonly storageError = signal('');
   /** A newly uploaded collection waiting to be merged (opens the review dialog). */
   readonly syncSource = signal<ImportResult | null>(null);
+  /** Export dialog is open. */
+  readonly exportOpen = signal(false);
   /** Short message shown at the top of the editor. */
   readonly notice = signal('');
 

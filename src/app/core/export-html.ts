@@ -72,7 +72,19 @@ export function buildHtml(p: Project, editorMode = false): string {
 `;
 }
 
+/** Cleans a user-typed file name and makes sure it ends with .html. */
+export function normalizeFileName(name: string): string {
+  const clean = name
+    .trim()
+    .replace(/[\\/:*?"<>|\u0000-\u001f]+/g, '-')
+    .replace(/^\.+/, '');
+  if (!clean) return '';
+  return /\.html?$/i.test(clean) ? clean : `${clean}.html`;
+}
+
 export function exportFileName(p: Project): string {
+  const custom = normalizeFileName(p.exportName ?? '');
+  if (custom) return custom;
   const base = p.title
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
@@ -80,11 +92,11 @@ export function exportFileName(p: Project): string {
   return `${base || 'api-console'}.html`;
 }
 
-export function downloadHtml(p: Project) {
+export function downloadHtml(p: Project, fileName = exportFileName(p)) {
   const blob = new Blob([buildHtml(p)], { type: 'text/html;charset=utf-8' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = exportFileName(p);
+  a.download = fileName;
   document.body.appendChild(a);
   a.click();
   a.remove();

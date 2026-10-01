@@ -1,7 +1,7 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { ProjectStore } from '../core/project.store';
 import { ConsoleOptions, DEFAULT_THEME, ThemeConfig } from '../core/models';
-import { downloadHtml, exportFileName } from '../core/export-html';
+import { exportFileName } from '../core/export-html';
 
 @Component({
   selector: 'app-theme-editor',
@@ -60,8 +60,7 @@ export class ThemeEditor {
   }
 
   export() {
-    const p = this.store.project();
-    if (p) downloadHtml(p);
+    this.store.exportOpen.set(true);
   }
 
   async copyEmbed() {
