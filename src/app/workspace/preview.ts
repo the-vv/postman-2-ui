@@ -74,8 +74,10 @@ export class Preview {
       }
       case 'navigate': {
         const sel = this.store.selection();
-        if (msg.id) {
+        if (msg.id && this.store.index().has(msg.id)) {
           if (sel.type !== 'node' || sel.id !== msg.id) this.store.selection.set({ type: 'node', id: msg.id });
+        } else if (msg.id) {
+          // A console-only page (e.g. Variables): keep the editor where it is.
         } else if (sel.type === 'node') {
           this.store.selection.set({ type: 'overview' });
         }

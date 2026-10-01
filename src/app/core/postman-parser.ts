@@ -441,6 +441,7 @@ export function parseExportedHtml(text: string, fileName: string): ImportResult 
     description: str(d.description),
     items: d.items,
     ...(d.scripts ? { scripts: d.scripts } : {}),
+    ...(d.guide ? { guide: d.guide } : {}),
     collectionVars: Array.isArray(d.collectionVars) ? d.collectionVars : [],
     environments: Array.isArray(d.environments) ? d.environments : [],
     activeEnvId: d.activeEnvId ?? null,
