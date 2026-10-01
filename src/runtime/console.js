@@ -570,6 +570,8 @@
     var mode = d.method === 'GET' || d.method === 'HEAD' ? 'none' : d.body.mode;
     if (mode === 'raw') {
       body = resolve(d.body.raw, missing, map);
+      // Like Postman, comments in a JSON body are removed before sending.
+      if (d.body.language === 'json') body = stripJsonComments(body);
       if (!hasCT()) {
         var ct = { json: 'application/json', xml: 'application/xml', html: 'text/html', javascript: 'application/javascript' }[d.body.language] || 'text/plain';
         headers.push(['Content-Type', ct]);
@@ -616,6 +618,40 @@
       return true;
     });
     return { method: d.method, url: url, headers: headers, sendHeaders: sendHeaders, body: body, curlBody: curlBody, missing: Object.keys(missing), skipped: skipped };
+  }
+
+  // Removes line and block comments that are outside of strings.
+  function stripJsonComments(src) {
+    var out = '';
+    var i = 0;
+    var inStr = false;
+    while (i < src.length) {
+      var c = src[i];
+      var n = src[i + 1];
+      if (inStr) {
+        out += c;
+        if (c === '\\') {
+          out += n || '';
+          i += 2;
+          continue;
+        }
+        if (c === '"') inStr = false;
+        i++;
+      } else if (c === '"') {
+        inStr = true;
+        out += c;
+        i++;
+      } else if (c === '/' && n === '/') {
+        while (i < src.length && src[i] !== '\n') i++;
+      } else if (c === '/' && n === '*') {
+        var end = src.indexOf('*/', i + 2);
+        i = end < 0 ? src.length : end + 2;
+      } else {
+        out += c;
+        i++;
+      }
+    }
+    return out;
   }
 
   function shq(s) {
