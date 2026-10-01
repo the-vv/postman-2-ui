@@ -121,6 +121,31 @@ export const DEFAULT_GUIDE: GuideConfig = {
   ].join('\n'),
 };
 
+/** Where "Send to API" posts the exported HTML file. */
+export interface PublishConfig {
+  method: 'POST' | 'PUT' | 'PATCH';
+  url: string;
+  headers: KV[];
+  /** formdata: multipart upload. base64: JSON body built from bodyTemplate. */
+  mode: 'formdata' | 'base64';
+  /** formdata: name of the file field. */
+  fieldName: string;
+  /** formdata: extra text fields sent with the file. */
+  fields: KV[];
+  /** base64: JSON body. Placeholders: {{file}}, {{fileName}}, {{fileSize}}, {{mimeType}}, {{fileDataUrl}}. */
+  bodyTemplate: string;
+}
+
+export const DEFAULT_PUBLISH: PublishConfig = {
+  method: 'POST',
+  url: '',
+  headers: [],
+  mode: 'formdata',
+  fieldName: 'file',
+  fields: [],
+  bodyTemplate: '{\n  "fileName": "{{fileName}}",\n  "mimeType": "{{mimeType}}",\n  "content": "{{file}}"\n}',
+};
+
 export interface ConsoleOptions {
   showTryIt: boolean;
   allowVarEdit: boolean;
@@ -139,6 +164,10 @@ export interface Project {
   scripts?: Scripts;
   /** Get started page. Missing means the default guide. */
   guide?: GuideConfig;
+  /** Custom export file name (without folder). Missing means one made from the title. */
+  exportName?: string;
+  /** Last "Send to API" settings. Kept in the builder only, never written into the export. */
+  publish?: PublishConfig;
   collectionVars: KV[];
   environments: Environment[];
   activeEnvId: string | null;

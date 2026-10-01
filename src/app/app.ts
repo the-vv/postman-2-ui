@@ -1,14 +1,14 @@
 import { Component, inject } from '@angular/core';
 import { ProjectStore } from './core/project.store';
-import { downloadHtml } from './core/export-html';
 import { pickFiles } from './core/file-utils';
 import { parseFile } from './core/postman-parser';
 import { Landing } from './landing/landing';
 import { Workspace } from './workspace/workspace';
+import { ExportDialog } from './workspace/export-dialog';
 
 @Component({
   selector: 'app-root',
-  imports: [Landing, Workspace],
+  imports: [Landing, Workspace, ExportDialog],
   template: `
     <header class="app-bar">
       <div class="logo"><span class="logo-mark">P</span> Postman <span class="arrow">→</span> UI</div>
@@ -24,7 +24,7 @@ import { Workspace } from './workspace/workspace';
           ⟳ Update from collection
         </button>
         <button class="btn ghost sm" (click)="store.selection.set({ type: 'theme' })">Theme</button>
-        <button class="btn primary" (click)="export()">Export HTML</button>
+        <button class="btn primary" (click)="export()">Export…</button>
       } @else {
         <span class="grow"></span>
         <span class="muted small">Runs fully in your browser. Nothing is uploaded.</span>
@@ -37,6 +37,9 @@ import { Workspace } from './workspace/workspace';
         <app-landing />
       }
     </main>
+    @if (store.exportOpen() && store.project()) {
+      <app-export-dialog />
+    }
   `,
 })
 export class App {
@@ -49,8 +52,7 @@ export class App {
   }
 
   export() {
-    const p = this.store.project();
-    if (p) downloadHtml(p);
+    this.store.exportOpen.set(true);
   }
 
   async syncFromCollection() {

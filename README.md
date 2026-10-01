@@ -15,7 +15,7 @@ Runs fully in the browser. There is no backend, and nothing is uploaded.
 - **Auth**: Bearer, Basic and API key, including auth inherited from folders or the collection.
 - **Postman scripts**: pre-request and test scripts (collection, folder and request level) run as they are in a sandbox when you click **Send**. Supported: `pm.environment` / `collectionVariables` / `globals` / `variables`, `pm.request` changes, `pm.response`, `pm.test` + `pm.expect`, `pm.sendRequest`, `pm.execution.skipRequest`, `console.log` and the old `postman.*` / `tests[...]` syntax. Scripts are editable in the builder and visible (and editable) in the exported console. Not available: `require()`, `setNextRequest`, cookies, visualizer.
 - **Theme**: color (blue by default), light / dark / system mode, layout, font, corners, density, custom CSS, and feature toggles.
-- **Export**: one self-contained `.html` file. Open it directly, host it anywhere, or embed it:
+- **Export**: one self-contained `.html` file with an optional custom file name. **Download** it, or **Send to API**: upload it to your own endpoint as multipart form data (file field + extra fields) or as Base64 inside a JSON body template, with any headers you need. Upload settings stay in the builder and are never written into the export. Open the file directly, host it anywhere, or embed it:
 
 ```html
 <iframe src="my-api.html" style="width:100%;height:800px;border:0"></iframe>

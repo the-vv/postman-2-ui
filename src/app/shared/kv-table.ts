@@ -9,7 +9,7 @@ import { KV } from '../core/models';
       <thead>
         <tr>
           <th class="c-chk" title="Enabled"></th>
-          <th>Variable</th>
+          <th>{{ keyLabel() }}</th>
           <th>Value</th>
           <th class="c-secret" title="Hide the value in the console">Secret</th>
           <th class="c-del"></th>
@@ -41,16 +41,18 @@ import { KV } from '../core/models';
           </tr>
         } @empty {
           <tr>
-            <td colspan="5" class="muted small empty">No variables yet.</td>
+            <td colspan="5" class="muted small empty">Nothing added yet.</td>
           </tr>
         }
       </tbody>
     </table>
-    <button class="btn ghost sm" (click)="add()">+ Add variable</button>
+    <button class="btn ghost sm" (click)="add()">+ Add {{ addLabel() }}</button>
   `,
 })
 export class KvTable {
   readonly rows = input.required<KV[]>();
+  readonly keyLabel = input('Variable');
+  readonly addLabel = input('variable');
   readonly rowsChange = output<KV[]>();
 
   set(i: number, patch: Partial<KV>) {
