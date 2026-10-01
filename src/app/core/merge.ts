@@ -57,6 +57,7 @@ const COMPARED: [string, (r: ApiRequest) => unknown][] = [
   ['headers', (r) => stripDesc(r.headers)],
   ['body', (r) => r.body],
   ['auth', (r) => r.auth],
+  ['scripts', (r) => (r.scripts && (r.scripts.prerequest || r.scripts.test) ? r.scripts : null)],
 ];
 
 export function diffFields(a: ApiRequest, b: ApiRequest): string[] {
@@ -158,7 +159,7 @@ export function applyMerge(current: Project, incoming: Project, plan: MergePlan,
         placedFolders.add(n.id);
         const children = [...build(n.children), ...(keepByParent.get(n.id) ?? [])];
         if (!children.length) continue;
-        out.push({ ...n, description: old?.description || n.description, children });
+        out.push({ ...n, description: old?.description || n.description, scripts: n.scripts ?? old?.scripts, children });
         continue;
       }
       const oldId = oldIdFor.get(n.id);
@@ -194,6 +195,7 @@ export function applyMerge(current: Project, incoming: Project, plan: MergePlan,
   return {
     ...current,
     description: current.description || incoming.description,
+    scripts: current.scripts ?? incoming.scripts,
     items,
     collectionVars: [...current.collectionVars, ...plan.newVars],
     warnings: [...new Set([...current.warnings, ...incoming.warnings])],

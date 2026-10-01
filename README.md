@@ -12,6 +12,7 @@ Runs fully in the browser. There is no backend, and nothing is uploaded.
 - **Examples**: examples from the collection are kept. Run a request in the preview and click **Save as example**, or add examples by hand.
 - **Variables**: collection variables and environments. Users can switch environments and edit values in the exported page (saved in their browser).
 - **Auth**: Bearer, Basic and API key, including auth inherited from folders or the collection.
+- **Postman scripts**: pre-request and test scripts (collection, folder and request level) run as they are in a sandbox when you click **Send**. Supported: `pm.environment` / `collectionVariables` / `globals` / `variables`, `pm.request` changes, `pm.response`, `pm.test` + `pm.expect`, `pm.sendRequest`, `pm.execution.skipRequest`, `console.log` and the old `postman.*` / `tests[...]` syntax. Scripts are editable in the builder and visible (and editable) in the exported console. Not available: `require()`, `setNextRequest`, cookies, visualizer.
 - **Theme**: color (blue by default), light / dark / system mode, layout, font, corners, density, custom CSS, and feature toggles.
 - **Export**: one self-contained `.html` file. Open it directly, host it anywhere, or embed it:
 
@@ -33,7 +34,7 @@ In the exported file:
 - `?sidebar=0` hides the sidebar.
 - `?theme=dark` or `?theme=light` forces a theme.
 
-> APIs must allow browser requests from the page's origin (CORS). Pre-request and test scripts are not run.
+> APIs must allow browser requests from the page's origin (CORS).
 
 ## Development
 
@@ -65,4 +66,5 @@ The site will be at `https://<user>.github.io/postman-2-ui/`.
 - `src/app/core/postman-parser.ts`: validates and converts Postman files.
 - `src/app/core/export-html.ts`: builds the standalone HTML.
 - `src/runtime/console.js` / `console.css`: the console runtime. It has no dependencies, is inlined into every export, and is also used by the live preview.
+- `src/runtime/sandbox.js`: the Postman script sandbox (`pm` API). It runs in a Web Worker, so scripts cannot touch the page.
 - `src/app/workspace/*`: the editor screens.

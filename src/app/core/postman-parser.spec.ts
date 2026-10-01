@@ -59,3 +59,41 @@ describe('postman parser', () => {
     });
   });
 });
+
+describe('postman scripts', () => {
+  const coll = {
+    info: { name: 'S', schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json' },
+    event: [{ listen: 'prerequest', script: { exec: ['console.log(1);'] } }],
+    item: [
+      {
+        name: 'F',
+        event: [{ listen: 'test', script: { exec: 'pm.test("f", () => {});' } }],
+        item: [
+          {
+            name: 'R',
+            request: 'https://a.com',
+            event: [
+              { listen: 'prerequest', script: { exec: ['pm.variables.set("a", 1);', 'pm.request.headers.add("X: 1");'] } },
+              { listen: 'test', script: { exec: ['const _ = require("lodash");'] } },
+              { listen: 'test', disabled: true, script: { exec: ['ignored()'] } },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+
+  it('reads collection, folder and request scripts', () => {
+    const r = parseFile(JSON.stringify(coll), 's.json');
+    const p = r.project!;
+    expect(p.scripts).toEqual({ prerequest: 'console.log(1);', test: '' });
+    const folder = p.items[0] as import('./models').Folder;
+    expect(folder.scripts).toEqual({ prerequest: '', test: 'pm.test("f", () => {});' });
+    const req = flattenRequests(p.items)[0];
+    expect(req.scripts).toEqual({
+      prerequest: 'pm.variables.set("a", 1);\npm.request.headers.add("X: 1");',
+      test: 'const _ = require("lodash");',
+    });
+    expect(r.warnings.some((w) => w.includes('require'))).toBe(true);
+  });
+});

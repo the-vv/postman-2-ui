@@ -1,10 +1,12 @@
 import { Component, computed, inject, input } from '@angular/core';
+import { ScriptsEditor } from '../shared/scripts-editor';
 import { ProjectStore } from '../core/project.store';
 import { ApiRequest, Example, KV } from '../core/models';
 import { uid } from '../core/postman-parser';
 
 @Component({
   selector: 'app-request-editor',
+  imports: [ScriptsEditor],
   templateUrl: './request-editor.html',
 })
 export class RequestEditor {

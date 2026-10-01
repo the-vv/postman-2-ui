@@ -32,6 +32,12 @@ export interface Auth {
   note?: string;
 }
 
+/** Postman scripts. They run in a sandbox in the console. */
+export interface Scripts {
+  prerequest: string;
+  test: string;
+}
+
 export interface Example {
   id: string;
   name: string;
@@ -60,6 +66,7 @@ export interface ApiRequest {
   /** Extra documentation added in the generator (markdown). */
   docs: string;
   examples: Example[];
+  scripts?: Scripts;
   hidden?: boolean;
 }
 
@@ -69,6 +76,7 @@ export interface Folder {
   name: string;
   description: string;
   children: TreeNode[];
+  scripts?: Scripts;
 }
 
 export type TreeNode = ApiRequest | Folder;
@@ -98,6 +106,7 @@ export interface ConsoleOptions {
   showExamples: boolean;
   showCurl: boolean;
   timeoutSec: number;
+  runScripts: boolean;
 }
 
 export interface Project {
@@ -105,6 +114,8 @@ export interface Project {
   title: string;
   description: string;
   items: TreeNode[];
+  /** Collection-level scripts, run before / after every request. */
+  scripts?: Scripts;
   collectionVars: KV[];
   environments: Environment[];
   activeEnvId: string | null;
@@ -131,4 +142,5 @@ export const DEFAULT_OPTIONS: ConsoleOptions = {
   showExamples: true,
   showCurl: true,
   timeoutSec: 30,
+  runScripts: true,
 };

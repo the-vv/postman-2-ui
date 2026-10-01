@@ -5,9 +5,11 @@ import { parseFile } from '../core/postman-parser';
 import { pickFiles } from '../core/file-utils';
 import { uid } from '../core/postman-parser';
 import { KvTable } from '../shared/kv-table';
+import { ScriptsEditor } from '../shared/scripts-editor';
 
 @Component({
   selector: 'app-folder-editor',
+  imports: [ScriptsEditor],
   template: `
     @let f = folder();
     <div class="editor-head">
@@ -24,6 +26,11 @@ import { KvTable } from '../shared/kv-table';
         (input)="store.patchNode(f.id, { description: $any($event.target).value })"
       ></textarea>
     </section>
+    <app-scripts-editor
+      [scripts]="f.scripts"
+      hint="Run for every API in this folder, after collection scripts and before the API's own."
+      (scriptsChange)="store.patchNode(f.id, { scripts: $event })"
+    />
   `,
 })
 export class FolderEditor {
@@ -33,6 +40,7 @@ export class FolderEditor {
 
 @Component({
   selector: 'app-overview-editor',
+  imports: [ScriptsEditor],
   template: `
     @if (store.project(); as p) {
       <div class="editor-head">
@@ -54,6 +62,11 @@ export class FolderEditor {
           ></textarea>
         </label>
       </section>
+      <app-scripts-editor
+        [scripts]="p.scripts"
+        hint="Collection scripts run for every API, before folder and API scripts."
+        (scriptsChange)="store.update({ scripts: $event })"
+      />
       @if (p.warnings.length) {
         <section class="panel">
           <h3>Import notes</h3>

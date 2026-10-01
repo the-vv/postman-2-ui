@@ -38,6 +38,12 @@
   ></textarea>
 </section>
 
+<app-scripts-editor
+  [scripts]="r.scripts"
+  hint="This API's own scripts. Collection and folder scripts run before them."
+  (scriptsChange)="patch({ scripts: $event })"
+/>
+
 <section class="panel">
   <div class="panel-head">
     <h3>Examples <span class="count">{{ r.examples.length }}</span></h3>

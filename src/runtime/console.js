@@ -30,6 +30,9 @@
     themeChosen: null,
     exTab: {},
     respTab: {},
+    globals: [],
+    scriptRuns: {},
+    phase: {},
     respPretty: {},
   };
 
@@ -292,7 +295,7 @@
     try {
       localStorage.setItem(
         STORE_KEY,
-        JSON.stringify({ envId: S.envId, envs: S.envs, coll: S.coll, theme: S.themeChosen })
+        JSON.stringify({ envId: S.envId, envs: S.envs, coll: S.coll, globals: S.globals, theme: S.themeChosen })
       );
     } catch (e) {
       /* storage blocked (e.g. sandboxed iframe) */
@@ -306,7 +309,9 @@
     });
     S.coll = clone(DATA.collectionVars || []);
     S.envId = DATA.activeEnvId && S.envs[DATA.activeEnvId] ? DATA.activeEnvId : null;
+    S.globals = [];
     if (stored) {
+      if (Array.isArray(stored.globals)) S.globals = stored.globals;
       if (stored.envId === null || S.envs[stored.envId]) S.envId = stored.envId;
       if (DATA.options.allowVarEdit) {
         Object.keys(stored.envs || {}).forEach(function (id) {
@@ -318,14 +323,19 @@
     S.varsSig = varsSignature();
   }
 
-  function varMap() {
+  /** Variable lookup: globals < collection < environment < script locals (like Postman). */
+  function varMap(locals) {
     var map = {};
+    S.globals.forEach(function (v) {
+      if (v.enabled !== false && v.key) map[v.key] = v.value;
+    });
     S.coll.forEach(function (v) {
       if (v.enabled !== false && v.key) map[v.key] = v.value;
     });
     (S.envs[S.envId] || []).forEach(function (v) {
       if (v.enabled !== false && v.key) map[v.key] = v.value;
     });
+    if (locals) Object.keys(locals).forEach(function (k) { map[k] = locals[k]; });
     return map;
   }
 
@@ -422,6 +432,8 @@
       body: b,
       auth: clone(r.auth) || { type: 'none' },
       files: {},
+      scripts: { prerequest: (r.scripts && r.scripts.prerequest) || '', test: (r.scripts && r.scripts.test) || '' },
+      scriptsOrigin: JSON.stringify(r.scripts || null),
       tab: r.pathVars && r.pathVars.length ? 'path' : b.mode !== 'none' ? 'body' : r.query && r.query.length ? 'params' : 'headers',
     };
     S.drafts[id] = d;
@@ -449,9 +461,9 @@
     });
   }
 
-  function buildRequest(id) {
-    var d = draft(id);
-    var map = varMap();
+  function buildRequest(id, opts) {
+    var d = (opts && opts.draft) || draft(id);
+    var map = varMap(opts && opts.locals);
     var missing = {};
     var skipped = [];
     var base = resolve(d.base, missing, map);
@@ -555,66 +567,292 @@
 
   /* ----------------------------------------------------------- send/fetch */
 
-  function send(id) {
+  function setPhase(id, text) {
+    S.phase[id] = text;
+    var el = S.current === id && $('#resp');
+    if (el && S.sending[id]) el.innerHTML = '<div class="resp-empty"><span class="spinner"></span> ' + esc(text) + '</div>';
+  }
+
+  async function send(id) {
     if (S.sending[id]) {
       S.sending[id].abort('cancelled');
       return;
     }
-    var r = buildRequest(id);
-    if (!r.url) return toast('Enter a URL first.');
     var ctrl = new AbortController();
     S.sending[id] = ctrl;
+    var run = { tests: [], logs: [], errors: [], skipped: false };
+    S.scriptRuns[id] = run;
+    S.phase[id] = 'Sending request…';
+    renderConsoleParts(id);
+
+    // 1. Pre-request scripts (collection → folders → request) may set variables and change the request.
+    var opts = {};
+    if (scriptsOn() && scriptChain('prerequest', id).length) {
+      setPhase(id, 'Running pre-request scripts…');
+      var d = draft(id);
+      var pre = await runScripts('prerequest', id, { request: reqForScript(d) });
+      collect(run, pre);
+      if (ctrl.signal.aborted) return finishSend(id, { error: 'Request cancelled.', hints: [], time: 0 });
+      opts.locals = pre.locals;
+      if (pre.request) opts.draft = draftFromScript(d, pre.request);
+      if (pre.skip) {
+        run.skipped = true;
+        return finishSend(id, { error: 'A pre-request script skipped this request (pm.execution.skipRequest).', hints: [], time: 0 });
+      }
+    }
+
+    var r = buildRequest(id, opts);
+    if (!r.url) {
+      delete S.sending[id];
+      renderConsoleParts(id);
+      return toast('Enter a URL first.');
+    }
+    setPhase(id, 'Sending request…');
     var timeout = Math.max(1, Number(DATA.options.timeoutSec) || 30) * 1000;
     var timer = setTimeout(function () { ctrl.abort('timeout'); }, timeout);
-    renderConsoleParts(id);
     var started = performance.now();
     var init = { method: r.method, headers: r.sendHeaders, signal: ctrl.signal };
     if (r.body !== null) init.body = r.body;
-    fetch(r.url, init)
-      .then(function (res) {
-        return res.arrayBuffer().then(function (buf) {
-          var ct = res.headers.get('content-type') || '';
-          var headers = [];
-          res.headers.forEach(function (v, k) { headers.push({ key: k, value: v, enabled: true }); });
-          var out = {
-            status: res.status,
-            statusText: res.statusText,
-            time: Math.round(performance.now() - started),
-            size: buf.byteLength,
-            headers: headers,
-            contentType: ct,
-          };
-          if (/^image\//i.test(ct)) out.image = URL.createObjectURL(new Blob([buf], { type: ct }));
-          else out.body = new TextDecoder().decode(buf);
-          out.language = langOf(headers, out.body);
-          return out;
-        });
-      })
-      .catch(function (err) {
-        var reason = ctrl.signal.reason;
-        var msg;
-        if (reason === 'timeout') msg = 'Request timed out after ' + timeout / 1000 + 's.';
-        else if (reason === 'cancelled') msg = 'Request cancelled.';
-        else {
-          msg = 'Could not reach the server (' + (err && err.message ? err.message : err) + ').';
-          var hints = [
-            'The API may not allow requests from this page (CORS). The server must send an Access-Control-Allow-Origin header.',
-            'Check the URL, your network connection and that the server is running.',
-          ];
-          if (location.protocol === 'https:' && /^http:/i.test(r.url)) hints.unshift('This page is HTTPS but the API is HTTP. Browsers block this (mixed content).');
-          return { error: msg, hints: hints, time: Math.round(performance.now() - started) };
-        }
-        return { error: msg, hints: [], time: Math.round(performance.now() - started) };
-      })
-      .then(function (out) {
-        clearTimeout(timer);
-        delete S.sending[id];
-        out.skipped = r.skipped;
-        var old = S.responses[id];
-        if (old && old.image) URL.revokeObjectURL(old.image);
-        S.responses[id] = out;
-        renderConsoleParts(id);
+    var out;
+    try {
+      var res = await fetch(r.url, init);
+      var buf = await res.arrayBuffer();
+      var ct = res.headers.get('content-type') || '';
+      var headers = [];
+      res.headers.forEach(function (v, k) { headers.push({ key: k, value: v, enabled: true }); });
+      out = {
+        status: res.status,
+        statusText: res.statusText,
+        time: Math.round(performance.now() - started),
+        size: buf.byteLength,
+        headers: headers,
+        contentType: ct,
+      };
+      if (/^image\//i.test(ct)) out.image = URL.createObjectURL(new Blob([buf], { type: ct }));
+      else out.body = new TextDecoder().decode(buf);
+      out.language = langOf(headers, out.body);
+    } catch (err) {
+      var reason = ctrl.signal.reason;
+      var hints = [];
+      var msg;
+      if (reason === 'timeout') msg = 'Request timed out after ' + timeout / 1000 + 's.';
+      else if (reason === 'cancelled') msg = 'Request cancelled.';
+      else {
+        msg = 'Could not reach the server (' + (err && err.message ? err.message : err) + ').';
+        hints = [
+          'The API may not allow requests from this page (CORS). The server must send an Access-Control-Allow-Origin header.',
+          'Check the URL, your network connection and that the server is running.',
+        ];
+        if (location.protocol === 'https:' && /^http:/i.test(r.url)) hints.unshift('This page is HTTPS but the API is HTTP. Browsers block this (mixed content).');
+      }
+      out = { error: msg, hints: hints, time: Math.round(performance.now() - started) };
+    }
+    clearTimeout(timer);
+    out.skipped = r.skipped;
+
+    // 2. Test scripts run on the response (not when the request failed).
+    if (!out.error && scriptsOn() && scriptChain('test', id).length && !ctrl.signal.aborted) {
+      setPhase(id, 'Running test scripts…');
+      var post = await runScripts('test', id, {
+        locals: opts.locals,
+        response: {
+          code: out.status,
+          status: out.statusText,
+          headers: out.headers.map(function (h) { return { key: h.key, value: h.value }; }),
+          body: out.body || '',
+          responseTime: out.time,
+          responseSize: out.size,
+        },
       });
+      collect(run, post);
+    }
+    finishSend(id, out);
+  }
+
+  function finishSend(id, out) {
+    delete S.sending[id];
+    var old = S.responses[id];
+    if (old && old.image) URL.revokeObjectURL(old.image);
+    S.responses[id] = out;
+    renderConsoleParts(id);
+  }
+
+  /* -------------------------------------------------------------- scripts */
+
+  function scriptsOn() {
+    return DATA.options.runScripts !== false;
+  }
+
+  function emptyScripts(sc) {
+    return !sc || (!String(sc.prerequest || '').trim() && !String(sc.test || '').trim());
+  }
+
+  /** Inherited (collection + folder) scripts for a request, outermost first. */
+  function inheritedScripts(id) {
+    var out = [];
+    if (!emptyScripts(DATA.scripts)) out.push({ source: 'Collection', scripts: DATA.scripts });
+    ancestors(id).forEach(function (f) {
+      if (!emptyScripts(f.scripts)) out.push({ source: 'Folder: ' + f.name, scripts: f.scripts });
+    });
+    return out;
+  }
+
+  function scriptChain(event, id) {
+    var list = inheritedScripts(id).concat([{ source: 'Request', scripts: draft(id).scripts }]);
+    return list
+      .map(function (x) { return { source: x.source, code: String((x.scripts && x.scripts[event]) || '') }; })
+      .filter(function (x) { return x.code.trim(); });
+  }
+
+  var sandboxUrl = null;
+  function sandboxWorker() {
+    if (!sandboxUrl) {
+      var src = document.getElementById('p2u-sandbox');
+      if (!src) throw new Error('script sandbox is missing from this file');
+      sandboxUrl = URL.createObjectURL(new Blob([src.textContent], { type: 'text/javascript' }));
+    }
+    return new Worker(sandboxUrl);
+  }
+
+  function snapshot(list) {
+    var o = {};
+    (list || []).forEach(function (v) {
+      if (v.enabled !== false && v.key) o[v.key] = v.value;
+    });
+    return o;
+  }
+
+  /** Runs one event's scripts in a Web Worker sandbox and applies variable changes. */
+  function runScripts(event, id, extra) {
+    var env = (DATA.environments || []).filter(function (e) { return e.id === S.envId; })[0];
+    var req = S.index.get(id);
+    var job = {
+      event: event,
+      scripts: scriptChain(event, id),
+      vars: {
+        environment: snapshot(S.envs[S.envId]),
+        environmentName: env ? env.name : '',
+        collection: snapshot(S.coll),
+        globals: snapshot(S.globals),
+      },
+      locals: (extra && extra.locals) || {},
+      request: (extra && extra.request) || null,
+      response: (extra && extra.response) || null,
+      info: { requestName: req.name, requestId: req.id },
+    };
+    return new Promise(function (resolve) {
+      var done = false;
+      var worker;
+      var finish = function (res) {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        if (worker) worker.terminate();
+        res = res || {};
+        var out = {
+          ops: res.ops || [],
+          logs: res.logs || [],
+          tests: res.tests || [],
+          errors: res.errors || [],
+          locals: res.locals || job.locals,
+          request: res.request || null,
+          skip: !!res.skip,
+          event: event,
+        };
+        applyOps(out);
+        resolve(out);
+      };
+      var timer = setTimeout(function () {
+        finish({ errors: [{ source: 'Scripts', message: 'Scripts stopped after 15 seconds (endless loop or slow pm.sendRequest?).' }] });
+      }, 15000);
+      try {
+        worker = sandboxWorker();
+      } catch (e) {
+        return finish({ errors: [{ source: 'Scripts', message: 'Scripts cannot run in this browser or page: ' + (e && e.message) }] });
+      }
+      worker.onmessage = function (e) { finish(e.data); };
+      worker.onerror = function (e) {
+        if (e.preventDefault) e.preventDefault();
+        finish({ errors: [{ source: 'Scripts', message: e.message || 'Script error' }] });
+      };
+      worker.postMessage(job);
+    });
+  }
+
+  function applyOps(res) {
+    if (!res.ops.length) return;
+    var noEnvWarned = false;
+    res.ops.forEach(function (o) {
+      var list;
+      if (o.scope === 'environment') {
+        list = S.envs[S.envId];
+        if (!list) {
+          list = S.globals;
+          if (!noEnvWarned) {
+            noEnvWarned = true;
+            res.logs.push({ level: 'warn', source: 'Scripts', text: 'No environment is selected, so pm.environment values were saved as globals.' });
+          }
+        }
+      } else if (o.scope === 'collectionVariables') list = S.coll;
+      else list = S.globals;
+      if (o.op === 'clear') list.length = 0;
+      else if (o.op === 'unset') {
+        for (var i = list.length - 1; i >= 0; i--) if (list[i].key === o.key) list.splice(i, 1);
+      } else {
+        var row = list.filter(function (r) { return r.key === o.key; })[0];
+        if (row) {
+          row.value = o.value;
+          row.enabled = true;
+        } else list.push({ key: o.key, value: o.value, enabled: true });
+      }
+    });
+    persist();
+    if (S.modal) renderModal();
+  }
+
+  function collect(run, res) {
+    var tag = res.event === 'prerequest' ? 'Pre-request' : 'Tests';
+    res.logs.forEach(function (l) { run.logs.push(Object.assign({ phase: tag }, l)); });
+    res.errors.forEach(function (e) { run.errors.push(Object.assign({ phase: tag }, e)); });
+    res.tests.forEach(function (t) { run.tests.push(t); });
+    var changed = res.ops.map(function (o) { return o.op === 'clear' ? 'cleared ' + o.scope : o.key; });
+    if (changed.length) run.logs.push({ phase: tag, level: 'info', source: 'Variables', text: 'Updated: ' + changed.filter(function (x, i) { return changed.indexOf(x) === i; }).join(', ') });
+  }
+
+  /** The request as pre-request scripts see it (unresolved, like Postman). */
+  function reqForScript(d) {
+    var kv = function (l) {
+      return l.filter(function (x) { return x.enabled && x.key; }).map(function (x) { return { key: x.key, value: x.value }; });
+    };
+    return {
+      method: d.method,
+      url: fullUrl(d),
+      headers: kv(d.headers),
+      body: {
+        mode: d.body.mode,
+        raw: d.body.raw,
+        urlencoded: kv(d.body.urlencoded),
+        formdata: kv(d.body.formdata.filter(function (f) { return f.type !== 'file'; })),
+        graphql: d.body.graphql,
+      },
+    };
+  }
+
+  /** A one-off copy of the draft with the pre-request script's changes. */
+  function draftFromScript(d, r) {
+    var parts = splitUrl(String(r.url));
+    var en = function (l) { return (l || []).map(function (x) { return { key: x.key, value: x.value, enabled: true }; }); };
+    return Object.assign({}, d, {
+      method: r.method || d.method,
+      base: parts.base,
+      query: parts.query,
+      headers: en(r.headers),
+      body: Object.assign({}, d.body, {
+        mode: r.body.mode || d.body.mode,
+        raw: r.body.raw,
+        urlencoded: r.body.mode === 'urlencoded' ? en(r.body.urlencoded) : d.body.urlencoded,
+      }),
+    });
   }
 
   /* --------------------------------------------------------------- toast */
@@ -960,7 +1198,8 @@
       ['headers', 'Headers', n(d.headers)],
       ['body', 'Body', d.body.mode !== 'none' ? '•' : 0],
       ['auth', 'Auth', d.auth.type !== 'none' ? '•' : 0],
-    ].filter(function (t) { return t[0] !== 'path' || d.pathVars.length; });
+      ['scripts', 'Scripts', scriptChain('prerequest', id).length + scriptChain('test', id).length ? '•' : 0],
+    ].filter(function (t) { return (t[0] !== 'path' || d.pathVars.length) && (t[0] !== 'scripts' || scriptsOn()); });
     if (!tabs.some(function (t) { return t[0] === d.tab; })) d.tab = 'params';
     $('#con-tabs').innerHTML = tabs.map(function (t) {
       return '<button class="tab' + (d.tab === t[0] ? ' on' : '') + '" data-act="con-tab" data-tab="' + t[0] + '">' + t[1] + (t[2] ? ' <span class="count">' + t[2] + '</span>' : '') + '</button>';
@@ -1013,7 +1252,30 @@
       if (a.type === 'unsupported') h += '<p class="muted small">' + esc(a.note || '') + '</p>';
       h += '<p class="muted small">Tip: use <code>{{variable}}</code> to read values from the environment.</p>';
     }
+    else if (d.tab === 'scripts') h = scriptsTabHtml(id, d);
     el.innerHTML = h;
+  }
+
+  function scriptsTabHtml(id, d) {
+    var ro = IS_EDITOR ? ' readonly' : '';
+    var lines = function (c) { return String(c).split('\n').length; };
+    var inh = inheritedScripts(id);
+    var h = '';
+    if (inh.length) {
+      h += '<div class="scr-inh"><div class="lbl">Also runs (inherited)</div>' + inh.map(function (x) {
+        return ['prerequest', 'test'].filter(function (ev) { return String(x.scripts[ev] || '').trim(); }).map(function (ev) {
+          return '<details><summary>' + esc(x.source) + ' · ' + (ev === 'prerequest' ? 'Pre-request' : 'Tests') + ' <span class="muted">(' + lines(x.scripts[ev]) + ' lines)</span></summary>' +
+            '<pre class="code"><code>' + esc(x.scripts[ev]) + '</code></pre></details>';
+        }).join('');
+      }).join('') + '</div>';
+    }
+    h += '<label class="lbl">Pre-request script <span class="muted">runs before the request is sent</span></label>' +
+      '<textarea class="code-input" data-f="preScript" spellcheck="false" rows="7"' + ro + ' placeholder="pm.environment.set(&quot;timestamp&quot;, Date.now());">' + esc(d.scripts.prerequest) + '</textarea>' +
+      '<label class="lbl">Tests <span class="muted">runs after the response arrives</span></label>' +
+      '<textarea class="code-input" data-f="testScript" spellcheck="false" rows="7"' + ro + ' placeholder="pm.test(&quot;Status is 200&quot;, () => pm.response.to.have.status(200));">' + esc(d.scripts.test) + '</textarea>' +
+      '<p class="muted small">' + (IS_EDITOR ? 'Edit scripts in the editor on the left. ' : '') +
+      'Postman scripts run in a sandbox: <code>pm.environment</code>, <code>pm.collectionVariables</code>, <code>pm.variables</code>, <code>pm.request</code>, <code>pm.response</code>, <code>pm.test</code>, <code>pm.expect</code>, <code>pm.sendRequest</code> and <code>console.log</code>. <code>require()</code> is not available.</p>';
+    return h;
   }
 
   function renderWarn(id) {
@@ -1021,6 +1283,14 @@
     if (!el) return;
     var r = buildRequest(id);
     var msgs = [];
+    // Names a pre-request script sets right before sending are not really missing.
+    if (scriptsOn()) {
+      var setByScript = {};
+      scriptChain('prerequest', id).forEach(function (sc) {
+        sc.code.replace(/\.set\(\s*['"`]([^'"`]+)['"`]/g, function (_, n) { setByScript[n] = true; });
+      });
+      r.missing = r.missing.filter(function (m) { return !setByScript[m]; });
+    }
     if (r.missing.length) msgs.push('Unresolved variables: ' + r.missing.map(function (m) { return '<code>{{' + esc(m) + '}}</code>'; }).join(' ') + (DATA.options.allowVarEdit !== false ? ' <button class="link" data-act="vars">Set values</button>' : ''));
     el.innerHTML = msgs.join('<br>');
   }
@@ -1030,15 +1300,17 @@
     if (!el) return;
     var res = S.responses[id];
     if (S.sending[id]) {
-      el.innerHTML = '<div class="resp-empty"><span class="spinner"></span> Sending request…</div>';
+      el.innerHTML = '<div class="resp-empty"><span class="spinner"></span> ' + esc(S.phase[id] || 'Sending request…') + '</div>';
       return;
     }
+    var run = S.scriptRuns[id];
     if (!res) {
       el.innerHTML = '<div class="resp-empty muted">Click <b>Send</b> to run this request and see the response here.</div>';
       return;
     }
     if (res.error) {
-      el.innerHTML = '<div class="resp-err"><b>' + esc(res.error) + '</b>' + (res.hints.length ? '<ul>' + res.hints.map(function (h) { return '<li>' + esc(h) + '</li>'; }).join('') + '</ul>' : '') + '</div>';
+      el.innerHTML = '<div class="resp-err"><b>' + esc(res.error) + '</b>' + (res.hints.length ? '<ul>' + res.hints.map(function (h) { return '<li>' + esc(h) + '</li>'; }).join('') + '</ul>' : '') + '</div>' +
+        (run && (run.logs.length || run.errors.length) ? '<div class="scr-out">' + scriptConsoleHtml(run) + '</div>' : '');
       return;
     }
     var tab = S.respTab[id] || 'body';
@@ -1046,7 +1318,13 @@
     var body = res.body || '';
     var shown = prettyOn ? pretty(body, res.language) : body;
     var content;
+    var nTests = run ? run.tests.length : 0;
+    var nPass = run ? run.tests.filter(function (t) { return t.pass; }).length : 0;
+    var nLogs = run ? run.logs.length + run.errors.length : 0;
+    if ((tab === 'tests' && !nTests) || (tab === 'console' && !nLogs)) tab = 'body';
     if (tab === 'headers') content = kvView(res.headers);
+    else if (tab === 'tests') content = testsHtml(run);
+    else if (tab === 'console') content = '<div class="scr-out">' + scriptConsoleHtml(run) + '</div>';
     else if (res.image) content = '<div class="img-wrap"><img src="' + res.image + '" alt="Response image"></div>';
     else if (!body) content = '<div class="muted small pad">Empty body</div>';
     else if (res.language === 'html' && prettyOn) content = '<iframe class="html-frame" sandbox="" srcdoc="' + esc(body) + '"></iframe>';
@@ -1060,9 +1338,29 @@
       (res.skipped && res.skipped.length ? '<div class="muted small pad-x">Browser does not allow setting: ' + esc(res.skipped.join(', ')) + '</div>' : '') +
       '<div class="tabs resp-tabs"><button class="tab' + (tab === 'body' ? ' on' : '') + '" data-act="resp-tab" data-tab="body">Body</button>' +
       '<button class="tab' + (tab === 'headers' ? ' on' : '') + '" data-act="resp-tab" data-tab="headers">Headers <span class="count">' + res.headers.length + '</span></button>' +
+      (nTests ? '<button class="tab' + (tab === 'tests' ? ' on' : '') + '" data-act="resp-tab" data-tab="tests">Tests <span class="count ' + (nPass === nTests ? 'c-ok' : 'c-bad') + '">' + nPass + '/' + nTests + '</span></button>' : '') +
+      (nLogs ? '<button class="tab' + (tab === 'console' ? ' on' : '') + '" data-act="resp-tab" data-tab="console">Console <span class="count' + (run.errors.length ? ' c-bad' : '') + '">' + nLogs + '</span></button>' : '') +
       '<span class="grow"></span>' +
       (tab === 'body' && !res.image ? '<label class="small muted pretty-toggle"><input type="checkbox" data-act="pretty"' + (prettyOn ? ' checked' : '') + '> Pretty</label><button class="btn ghost sm" data-act="copy-resp">' + ICON.copy + '</button>' : '') +
       '</div>' + content;
+  }
+
+  function testsHtml(run) {
+    return '<div class="tests">' + run.tests.map(function (t) {
+      var cls = t.skipped ? 'skip' : t.pass ? 'pass' : 'fail';
+      return '<div class="t-row t-' + cls + '"><span class="t-badge">' + (t.skipped ? 'SKIP' : t.pass ? 'PASS' : 'FAIL') + '</span>' +
+        '<div><div>' + esc(t.name) + '</div>' + (t.error ? '<div class="t-err">' + esc(t.error) + '</div>' : '') +
+        (t.source && t.source !== 'Request' ? '<div class="muted small">' + esc(t.source) + '</div>' : '') + '</div></div>';
+    }).join('') + '</div>';
+  }
+
+  function scriptConsoleHtml(run) {
+    var rows = run.errors.map(function (e) {
+      return '<div class="log log-error"><span class="log-src">' + esc(e.phase + ' · ' + e.source) + '</span>' + esc(e.message) + '</div>';
+    }).concat(run.logs.map(function (l) {
+      return '<div class="log log-' + esc(l.level) + '"><span class="log-src">' + esc(l.phase + ' · ' + l.source) + '</span>' + esc(l.text) + '</div>';
+    }));
+    return rows.join('') || '<div class="muted small pad">No output.</div>';
   }
 
   /* ----------------------------------------------------- variables modal */
@@ -1095,13 +1393,14 @@
         }).join('') + '</select></div>' : '') +
       (env ? '<h3 class="sub">' + esc(env.name) + '</h3>' + table(S.envs[env.id], 'env') : '') +
       '<h3 class="sub">Collection variables</h3>' + table(S.coll, 'coll') +
+      (S.globals.length ? '<h3 class="sub">Globals <span class="muted small">(set by scripts)</span></h3>' + table(S.globals, 'glob') : '') +
       '<p class="muted small">Use variables as <code>{{name}}</code> in URLs, headers and bodies. Environment values override collection values.' + (IS_EDITOR ? ' Changes here are for testing only. Edit defaults in the generator.' : ' Your changes are saved in this browser.') + '</p>' +
       '</div><div class="modal-foot">' + (editable ? '<button class="btn ghost" data-act="vars-reset">Reset to defaults</button>' : '') + '<span class="grow"></span><button class="btn primary" data-act="close-modal">Done</button></div>' +
       '</div></div>';
   }
 
   function varsList(scope) {
-    return scope === 'env' ? S.envs[S.envId] : S.coll;
+    return scope === 'env' ? S.envs[S.envId] : scope === 'glob' ? S.globals : S.coll;
   }
 
   function setEnv(id) {
@@ -1214,6 +1513,12 @@
         break;
       case 'gqlVars':
         d.body.graphql.variables = t.value;
+        break;
+      case 'preScript':
+        d.scripts.prerequest = t.value;
+        break;
+      case 'testScript':
+        d.scripts.test = t.value;
         break;
       case 'authType':
         d.auth = { type: t.value, in: 'header' };
@@ -1342,6 +1647,7 @@
       case 'reset':
         delete S.drafts[id];
         delete S.responses[id];
+        delete S.scriptRuns[id];
         renderMain();
         break;
       case 'copy-curl':
@@ -1405,6 +1711,16 @@
       DATA = msg.data;
       DATA.editorMode = true;
       buildIndex();
+      // Scripts edited in the builder replace the preview's copy.
+      Object.keys(S.drafts).forEach(function (id) {
+        var r = S.index.get(id);
+        var sig = JSON.stringify(r.scripts || null);
+        var d = S.drafts[id];
+        if (sig !== d.scriptsOrigin) {
+          d.scripts = { prerequest: (r.scripts && r.scripts.prerequest) || '', test: (r.scripts && r.scripts.test) || '' };
+          d.scriptsOrigin = sig;
+        }
+      });
       if (varsSignature() !== S.varsSig) initVars(null);
       applyTheme();
       document.title = DATA.title;
