@@ -3,6 +3,8 @@ import { Project } from './models';
 // @ts-ignore - text loader import
 import runtimeJs from '../../runtime/console.js' with { loader: 'text' };
 // @ts-ignore - text loader import
+import sandboxJs from '../../runtime/sandbox.js' with { loader: 'text' };
+// @ts-ignore - text loader import
 import runtimeCss from '../../runtime/console.css' with { loader: 'text' };
 
 /** Marks exported files so the generator can read them back. */
@@ -18,6 +20,7 @@ export function consoleData(p: Project, editorMode: boolean) {
     title: p.title,
     description: p.description,
     items: p.items,
+    scripts: p.scripts ?? null,
     collectionVars: p.collectionVars,
     environments: p.environments,
     activeEnvId: p.activeEnvId,
@@ -41,6 +44,10 @@ function scriptJson(v: unknown): string {
     .replace(/\u2029/g, '\\u2029');
 }
 
+function noScriptEnd(js: string): string {
+  return js.replace(/<\/script/gi, '<\\/script');
+}
+
 export function buildHtml(p: Project, editorMode = false): string {
   const data = consoleData(p, editorMode);
   const customCss = p.theme.customCss.replace(/<\/style/gi, '<\\/style');
@@ -57,7 +64,8 @@ export function buildHtml(p: Project, editorMode = false): string {
 <body>
 <div id="app"></div>
 <script type="application/json" id="p2u-data">${scriptJson(data)}</script>
-<script>${(runtimeJs as string).replace(/<\/script/gi, '<\\/script')}</script>
+<script type="text/plain" id="p2u-sandbox">${noScriptEnd(sandboxJs as string)}</script>
+<script>${noScriptEnd(runtimeJs as string)}</script>
 </body>
 </html>
 `;

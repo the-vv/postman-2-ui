@@ -6,6 +6,7 @@ import {
   Environment,
   Example,
   Folder,
+  Scripts,
   KV,
   Project,
   RequestBody,
@@ -248,6 +249,27 @@ function parseExamples(responses: Json): Example[] {
   });
 }
 
+const UNSUPPORTED_SCRIPT = /\brequire\s*\(|setNextRequest|pm\.cookies|pm\.visualizer|\bxml2Json\b|\bcheerio\b/;
+
+/** Reads pre-request and test scripts from a Postman "event" list. */
+function parseScripts(events: Json, warnings: Set<string>): Scripts | undefined {
+  if (!Array.isArray(events)) return undefined;
+  const code = (listen: string) =>
+    events
+      .filter((e) => e?.listen === listen && !e.disabled && e.script)
+      .map((e) => (Array.isArray(e.script.exec) ? e.script.exec.join('\n') : str(e.script.exec)))
+      .join('\n\n')
+      .trim();
+  const s: Scripts = { prerequest: code('prerequest'), test: code('test') };
+  if (!s.prerequest && !s.test) return undefined;
+  if (UNSUPPORTED_SCRIPT.test(s.prerequest + s.test)) {
+    warnings.add(
+      'Some scripts use things a browser cannot run (require, setNextRequest, cookies, visualizer). Those lines will show an error in the console.',
+    );
+  }
+  return s;
+}
+
 interface Ctx {
   warnings: Set<string>;
   ids: Set<string>;
@@ -266,9 +288,7 @@ function parseItems(items: Json[], parentAuth: Auth, path: string[], ctx: Ctx): 
   const out: TreeNode[] = [];
   for (const it of items) {
     if (!it || typeof it !== 'object') continue;
-    if (Array.isArray(it.event) && it.event.some((e: Json) => e?.script?.exec?.length)) {
-      ctx.warnings.add('Pre-request and test scripts are not run by the generated console.');
-    }
+    const scripts = parseScripts(it.event, ctx.warnings);
     const name = str(it.name) || 'Untitled';
     if (Array.isArray(it.item)) {
       const auth = parseAuth(it.auth, ctx.warnings) ?? parentAuth;
@@ -279,6 +299,7 @@ function parseItems(items: Json[], parentAuth: Auth, path: string[], ctx: Ctx): 
         description: description(it.description),
         children: parseItems(it.item, auth, [...path, name], ctx),
       };
+      if (scripts) folder.scripts = scripts;
       ctx.counts.folders++;
       out.push(folder);
     } else if (it.request !== undefined) {
@@ -300,6 +321,7 @@ function parseItems(items: Json[], parentAuth: Auth, path: string[], ctx: Ctx): 
         docs: '',
         examples,
       };
+      if (scripts) req.scripts = scripts;
       ctx.counts.requests++;
       ctx.counts.examples += examples.length;
       out.push(req);
@@ -334,9 +356,7 @@ export function parseCollection(json: Json, fileName: string): ImportResult {
   const ctx: Ctx = { warnings: new Set(), ids: new Set(), counts: { requests: 0, folders: 0, examples: 0 } };
   const rootAuth = parseAuth(c.auth, ctx.warnings) ?? { type: 'none' };
   const items = parseItems(c.item, rootAuth, [], ctx);
-  if (Array.isArray(c.event) && c.event.some((e: Json) => e?.script?.exec?.length)) {
-    ctx.warnings.add('Pre-request and test scripts are not run by the generated console.');
-  }
+  const rootScripts = parseScripts(c.event, ctx.warnings);
   if (!ctx.counts.requests) res.errors.push('The collection has no requests.');
   res.warnings.push(...ctx.warnings);
   if (res.errors.length) return res;
@@ -350,6 +370,7 @@ export function parseCollection(json: Json, fileName: string): ImportResult {
     title: str(c.info.name),
     description: description(c.info.description),
     items,
+    ...(rootScripts ? { scripts: rootScripts } : {}),
     collectionVars: kvList(c.variable, (i, kv) => {
       if (i.type === 'secret') kv.type = 'secret';
     }),
@@ -419,6 +440,7 @@ export function parseExportedHtml(text: string, fileName: string): ImportResult 
     title: str(d.title) || 'API console',
     description: str(d.description),
     items: d.items,
+    ...(d.scripts ? { scripts: d.scripts } : {}),
     collectionVars: Array.isArray(d.collectionVars) ? d.collectionVars : [],
     environments: Array.isArray(d.environments) ? d.environments : [],
     activeEnvId: d.activeEnvId ?? null,

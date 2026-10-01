@@ -97,6 +97,10 @@
     <input type="checkbox" [checked]="o.showCurl" (change)="setOption({ showCurl: $any($event.target).checked })" />
     “Copy as cURL” button
   </label>
+  <label class="check">
+    <input type="checkbox" [checked]="o.runScripts" (change)="setOption({ runScripts: $any($event.target).checked })" />
+    Run Postman scripts (pre-request &amp; tests) and show the Scripts tab
+  </label>
   <label class="block inline">
     <span>Request timeout (seconds)</span>
     <input

@@ -90,16 +90,26 @@ describe('merge', () => {
     expect(reqs[0].headers).toEqual([]);
   });
 
+  it('treats script changes as an API change', () => {
+    const cur = v1();
+    const inc = v1();
+    flattenRequests(inc.items)[0].scripts = { prerequest: '', test: 'pm.test("x", () => {});' };
+    const plan = planMerge(cur, inc);
+    expect(plan.changed.map((c) => c.fields)).toEqual([['scripts']]);
+  });
+
   it('reads back an exported html file without loss', () => {
     const p = v1();
     const first = flattenRequests(p.items)[1];
     first.hidden = true;
     p.theme.primary = '#7c3aed';
+    p.scripts = { prerequest: 'console.log("</script>")', test: '' };
     const r = parseFile(buildHtml(p), 'api.html');
     expect(r.kind).toBe('console');
     expect(r.ok).toBe(true);
     expect(r.project!.items).toEqual(p.items);
     expect(r.project!.theme.primary).toBe('#7c3aed');
+    expect(r.project!.scripts).toEqual(p.scripts);
     expect(parseFile('<html><body>hi</body></html>', 'x.html').ok).toBe(false);
   });
 });
